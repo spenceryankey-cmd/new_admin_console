@@ -1,0 +1,17 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { color-scheme: dark; }
+html, body, #root { height: 100%; }
+body {
+  @apply bg-ink-950 text-ink-100 font-sans antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+:focus-visible { @apply outline outline-2 outline-offset-2 outline-forest-500; }
+
+@layer components {
+  .field { @apply w-full rounded-lg border border-ink-700 bg-ink-900 px-3 py-2.5 text-sm text-ink-50 placeholder:text-ink-400 focus:border-forest-500 disabled:opacity-60; }
+  .label { @apply mb-1.5 block text-xs font-semibold uppercase tracking-wide text-ink-300; }
+  .card { @apply rounded-xl border border-ink-700 bg-ink-900; }
+}
