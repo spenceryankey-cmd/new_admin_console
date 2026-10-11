@@ -1,0 +1,16 @@
+{
+  "name": "beyondx-admin-console",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": ["packages/*", "apps/*"],
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "build:shared": "npm run build -w @beyondx/shared",
+    "build": "npm run build:shared && npm run build -w @beyondx/api && npm run build -w @beyondx/web",
+    "dev:api": "npm run build:shared && npm run dev -w @beyondx/api",
+    "dev:web": "npm run build:shared && npm run dev -w @beyondx/web",
+    "typecheck": "npm run build:shared && npm run typecheck -w @beyondx/api && npm run typecheck -w @beyondx/web",
+    "test": "npm run build:shared && npm run test -w @beyondx/shared && npm run test -w @beyondx/api",
+    "lint:copy": "node scripts/check-ui-copy.mjs"
+  }
+}
