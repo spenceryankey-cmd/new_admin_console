@@ -28,16 +28,16 @@ beforeEach(() => {
   const config = new ConfigService(xstore)
   jobs = new JobsService(jstore, xstore, config, new XpertsService(xstore, config))
   reqs = new RequestsService(rstore, xstore, config)
-  xstore.addXpert('t1', 'full_active', { fullName: 'Yaw Tiler', homeArea: 'Madina', skills: ['Tiling'], accountActive: true })
-  xstore.addXpert('t2', 'provisional_active', { fullName: 'Kofi Tiler', homeArea: 'Tema', skills: ['Tiling'], accountActive: true })
-  xstore.addXpert('c1', 'full_active', { fullName: 'Esi Cleaner', homeArea: 'Madina', skills: ['Cleaning'], accountActive: true })
-  xstore.addXpert('t4', 'provisional_active', { fullName: 'Ama Backup', homeArea: 'Kumasi', skills: ['Tiling'], accountActive: true })
-  xstore.addXpert('t5', 'provisional_active', { fullName: 'Efua Backup', homeArea: 'Kumasi', skills: ['Tiling'], accountActive: true })
-  xstore.addXpert('t3', 'suspended', { fullName: 'Suspended Tiler', homeArea: 'Madina', skills: ['Tiling'], accountActive: false })
+  xstore.addXpert('t1', 'full_active', { fullName: 'Yaw Tiler', homeArea: 'Madina', skills: ['Skilled Trades'], accountActive: true })
+  xstore.addXpert('t2', 'provisional_active', { fullName: 'Kofi Tiler', homeArea: 'Tema', skills: ['Skilled Trades'], accountActive: true })
+  xstore.addXpert('c1', 'full_active', { fullName: 'Esi Cleaner', homeArea: 'Madina', skills: ['Facility & Cleaning'], accountActive: true })
+  xstore.addXpert('t4', 'provisional_active', { fullName: 'Ama Backup', homeArea: 'Kumasi', skills: ['Skilled Trades'], accountActive: true })
+  xstore.addXpert('t5', 'provisional_active', { fullName: 'Efua Backup', homeArea: 'Kumasi', skills: ['Skilled Trades'], accountActive: true })
+  xstore.addXpert('t3', 'suspended', { fullName: 'Suspended Tiler', homeArea: 'Madina', skills: ['Skilled Trades'], accountActive: false })
 })
 
 async function paidJob() {
-  const r = await reqs.create(ops, { employerName: 'Mr Adu', employerPhone: '0244000000', category: 'Tiling', description: 'Tile a floor', location: 'Madina', timing: 'Monday', photos: [] })
+  const r = await reqs.create(ops, { employerName: 'Mr Adu', employerPhone: '0244000000', category: 'Skilled Trades', description: 'Tile a floor', location: 'Madina', timing: 'Monday', photos: [] })
   await reqs.compose(ops, r.id, { lines: [{ description: 'Labour', amountGhs: 500 }], totalGhs: 500 })
   await reqs.send(ops, r.id)
   await reqs.respond(ops, r.id, { response: 'accepted' })
@@ -47,7 +47,7 @@ async function paidJob() {
 }
 
 async function paidJob2() {
-  const r = await reqs.create(ops, { employerName: 'Mrs Ofori', employerPhone: '0244000001', category: 'Tiling', description: 'Tile a wall', location: 'Madina', timing: 'Tuesday', photos: [] })
+  const r = await reqs.create(ops, { employerName: 'Mrs Ofori', employerPhone: '0244000001', category: 'Skilled Trades', description: 'Tile a wall', location: 'Madina', timing: 'Tuesday', photos: [] })
   await reqs.compose(ops, r.id, { lines: [{ description: 'Labour', amountGhs: 300 }], totalGhs: 300 })
   await reqs.send(ops, r.id)
   await reqs.respond(ops, r.id, { response: 'accepted' })
@@ -64,9 +64,9 @@ describe('rules', () => {
     expect(canReplace('awaiting_dispatch')).toBe(false)
   })
   it('matches on skill, status and activity, and ranks by fit', () => {
-    const base = { job: { category: 'Tiling', location: 'Madina', amountGhs: 500 }, band: { minGhs: 400, maxGhs: 600 }, activeJobs: 0 }
-    const x = (o: object) => ({ id: 'a', fullName: 'A', status: 'full_active', accountActive: true, homeArea: 'Madina', skills: ['Tiling'], ...o })
-    expect(matchXpert({ ...base, xpert: x({ skills: ['Cleaning'] }) })).toBeNull()
+    const base = { job: { category: 'Skilled Trades', location: 'Madina', amountGhs: 500 }, band: { minGhs: 400, maxGhs: 600 }, activeJobs: 0 }
+    const x = (o: object) => ({ id: 'a', fullName: 'A', status: 'full_active', accountActive: true, homeArea: 'Madina', skills: ['Skilled Trades'], ...o })
+    expect(matchXpert({ ...base, xpert: x({ skills: ['Facility & Cleaning'] }) })).toBeNull()
     expect(matchXpert({ ...base, xpert: x({ status: 'suspended' }) })).toBeNull()
     expect(matchXpert({ ...base, xpert: x({ accountActive: false }) })).toBeNull()
     const good = matchXpert({ ...base, xpert: x({}) })!
@@ -93,7 +93,7 @@ describe('rules', () => {
 
 describe('job life', () => {
   it('a job appears when the payment is recorded, not before', async () => {
-    const r = await reqs.create(ops, { employerName: 'E', employerPhone: '0244000000', category: 'Tiling', description: 'Tile a floor', location: 'Madina', timing: 'Monday', photos: [] })
+    const r = await reqs.create(ops, { employerName: 'E', employerPhone: '0244000000', category: 'Skilled Trades', description: 'Tile a floor', location: 'Madina', timing: 'Monday', photos: [] })
     await reqs.compose(ops, r.id, { lines: [{ description: 'Labour', amountGhs: 500 }], totalGhs: 500 })
     await reqs.send(ops, r.id)
     await reqs.respond(ops, r.id, { response: 'accepted' })
@@ -307,7 +307,7 @@ describe('change orders', () => {
 })
 
 describe('recurring services', () => {
-  const body = { employerName: 'Mrs Ofori', employerPhone: '0244000000', category: 'Cleaning', description: 'Weekly clean', location: 'East Legon', timing: 'Mondays', frequency: 'weekly' as const }
+  const body = { employerName: 'Mrs Ofori', employerPhone: '0244000000', category: 'Facility & Cleaning', description: 'Weekly clean', location: 'East Legon', timing: 'Mondays', frequency: 'weekly' as const }
   it('generates a request when due, moves the date, and does nothing the second time', async () => {
     const today = new Date().toISOString().slice(0, 10)
     const s = await jobs.createRecurring(ops, { ...body, nextDue: today })

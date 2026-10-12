@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, ForbiddenException, Inject, Inj
 import {
   EMPTY_RELIABILITY,
   FLAG_OPEN,
+  taskTypeBelongsTo,
   can,
   reviewTriggerFor,
   type CoordinatorDetail,
@@ -108,6 +109,7 @@ export class TrustService {
     const job = await this.store.jobInfo(i.jobId)
     if (!job) throw new BadRequestException('That job was not found.')
     if (job.status !== 'completed') throw new ConflictException('Feedback can be logged once the job is completed.')
+    if (i.taskTypeCode && !taskTypeBelongsTo(i.taskTypeCode, job.category)) throw new BadRequestException('That task type does not belong to this job\'s category.')
     const rec = await guard(() => this.store.createFeedback(i, actor.userId))
     // New employer feedback can make a completed job clean, which can lift a provisional Xpert to fully active.
     if (job.xpertId && i.side === 'employer') await this.xpertsSvc.afterScreeningEvent(job.xpertId)

@@ -1,5 +1,5 @@
 \set ON_ERROR_STOP off
-insert into job_request(employer_name,employer_phone,category,description,location,timing,status) values ('Emp','024','Tiling','Floor','Madina','Mon','quoted') returning id \gset r_
+insert into job_request(employer_name,employer_phone,category,description,location,timing,status) values ('Emp','024','Skilled Trades','Floor','Madina','Mon','quoted') returning id \gset r_
 insert into quote(request_id,version,status,total_ghs,lines,sent_at,valid_until) values (:'r_id',1,'sent',500,'[]',now(),now()+interval '3 days') returning id \gset q_
 select quote_apply_response(:'q_id','sent','accepted','employer',null,null);
 \echo no job yet (expect 0):
@@ -37,7 +37,7 @@ select change_order_confirm(:'c_id','xpert',null);
 select status from change_order;
 select change_order_reject(:'c_id','xpert','no',null);
 \echo recurring:
-insert into recurring_service(employer_name,employer_phone,category,description,location,timing,frequency,next_due) values ('E','1','Cleaning','Deep','East','Mon','weekly',current_date) returning id \gset s_
+insert into recurring_service(employer_name,employer_phone,category,description,location,timing,frequency,next_due) values ('E','1','Facility & Cleaning','Deep','East','Mon','weekly',current_date) returning id \gset s_
 select recurring_generate(:'s_id',null);
 \echo again same day (expect ERROR):
 select recurring_generate(:'s_id',null);

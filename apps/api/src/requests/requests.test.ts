@@ -15,7 +15,7 @@ let store: FakeRequestStore
 let svc: RequestsService
 let xstore: FakeStore
 
-const input = { employerName: 'Mr Adu', employerPhone: '0244000000', category: 'Tiling', description: 'Tile a kitchen floor', location: 'Madina', timing: 'Next week', photos: [] }
+const input = { employerName: 'Mr Adu', employerPhone: '0244000000', category: 'Skilled Trades', description: 'Tile a kitchen floor', location: 'Madina', timing: 'Next week', photos: [] }
 const quoteBody = { lines: [{ description: 'Labour', amountGhs: 400 }, { description: 'Materials', amountGhs: 150.5 }], totalGhs: 550.5 }
 
 beforeEach(() => {
@@ -149,16 +149,16 @@ describe('payment', () => {
 
 describe('pricing', () => {
   it('a new benchmark replaces the live one and keeps the old', async () => {
-    await svc.saveBenchmark(ops, { category: 'Tiling', unit: 'per_job', amountGhs: 500, reason: 'First rate' })
-    await svc.saveBenchmark(ops, { category: 'tiling', unit: 'per_job', amountGhs: 550, reason: 'Prices went up' })
+    await svc.saveBenchmark(ops, { category: 'Skilled Trades', unit: 'per_job', amountGhs: 500, reason: 'First rate' })
+    await svc.saveBenchmark(ops, { category: 'Skilled Trades', unit: 'per_job', amountGhs: 550, reason: 'Prices went up' })
     const all = await svc.benchmarks()
     expect(all.filter((r) => r.active)).toHaveLength(1)
     expect(all).toHaveLength(2)
   })
   it('refuses a band for an Xpert that does not exist, and a band that is upside down', async () => {
-    await expect(svc.saveBand(ops, { xpertId: 'nope', category: 'Tiling', minGhs: 100, maxGhs: 200, reason: 'Set' })).rejects.toBeInstanceOf(BadRequestException)
+    await expect(svc.saveBand(ops, { xpertId: 'nope', category: 'Skilled Trades', minGhs: 100, maxGhs: 200, reason: 'Set' })).rejects.toBeInstanceOf(BadRequestException)
     xstore.addXpert('x1', 'full_active')
-    const b = await svc.saveBand(ops, { xpertId: 'x1', category: 'Tiling', minGhs: 100, maxGhs: 200, reason: 'Set' })
+    const b = await svc.saveBand(ops, { xpertId: 'x1', category: 'Skilled Trades', minGhs: 100, maxGhs: 200, reason: 'Set' })
     expect(b.xpertName).toBe('Xpert x1')
     await expect(svc.patchBand(ops, b.id, { maxGhs: 50 }, 'Oops')).rejects.toBeInstanceOf(UnprocessableEntityException)
   })

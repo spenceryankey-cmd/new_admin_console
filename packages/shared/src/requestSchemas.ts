@@ -9,16 +9,18 @@ import {
   type QuoteStatus,
   type RequestStatus,
 } from './requests'
+import { isCategoryLabel } from './catalogue'
 
 const text = (max = 2000) => z.string().trim().max(max)
 const reason = z.string().trim().min(3, 'Give a reason of at least 3 characters').max(1000)
+const categoryLabel = z.string().trim().refine(isCategoryLabel, 'Choose one of the listed categories')
 const money = z.number().positive('Enter an amount above zero').max(10_000_000).refine((n) => Math.round(n * 100) === Math.round(n * 100), 'Use at most two decimal places')
 
 export const createRequestSchema = z.object({
   employerName: z.string().trim().min(2).max(120),
   employerPhone: z.string().trim().min(5).max(40),
   employerId: z.string().trim().max(80).optional(),
-  category: z.string().trim().min(2).max(120),
+  category: categoryLabel,
   description: text().min(5, 'Describe the work'),
   location: z.string().trim().min(2).max(300),
   timing: z.string().trim().min(2).max(300),
@@ -57,7 +59,7 @@ export const paymentReceivedSchema = z.object({
 export type PaymentReceivedInput = z.infer<typeof paymentReceivedSchema>
 
 export const benchmarkSchema = z.object({
-  category: z.string().trim().min(2).max(120),
+  category: categoryLabel,
   unit: z.enum(BENCHMARK_UNITS),
   amountGhs: money,
   reason,
@@ -69,7 +71,7 @@ export const benchmarkUpdateSchema = z.object({ amountGhs: money.optional(), act
 export const bandSchema = z
   .object({
     xpertId: z.string().trim().min(1).max(80),
-    category: z.string().trim().min(2).max(120),
+    category: categoryLabel,
     minGhs: money,
     maxGhs: money,
     reason,

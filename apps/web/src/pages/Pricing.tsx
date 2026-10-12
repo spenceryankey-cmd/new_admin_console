@@ -3,6 +3,7 @@ import { Plus } from 'lucide-react'
 import { useState } from 'react'
 import { BENCHMARK_UNITS, BENCHMARK_UNIT_LABELS, formatGhs, type BenchmarkRate, type BenchmarkUnit, type PriceBand, type XpertSummary } from '@beyondx/shared'
 import { useAuth } from '../auth/AuthProvider'
+import { CategorySelect } from '../components/catalogue'
 import { ActionDialog, Badge, Button, EmptyState, ErrorState, PageHeader, Spinner } from '../components/ui'
 import { api, errorText } from '../lib/api'
 
@@ -45,7 +46,7 @@ function Benchmarks() {
         <label className="flex min-h-[40px] items-center gap-2 text-sm text-ink-200"><input type="checkbox" className="h-4 w-4 accent-forest-600" checked={showOld} onChange={(e) => setShowOld(e.target.checked)} /> Show replaced rates</label>
         <Button onClick={() => setDlg({ kind: 'add' })}><Plus className="h-4 w-4" aria-hidden /> Add a rate</Button>
       </div>
-      {rows.length === 0 && <EmptyState title="No benchmark rates yet" hint="Add one for each category you quote. The category must match the request category." />}
+      {rows.length === 0 && <EmptyState title="No benchmark rates yet" hint="Add one for each category you quote. Categories come from the fixed list." />}
       <ul className="space-y-3">
         {rows.map((r) => (
           <li key={r.id} className={`card flex flex-wrap items-center gap-x-6 gap-y-2 p-4 ${r.active ? '' : 'opacity-60'}`}>
@@ -73,7 +74,7 @@ function AddRate({ onClose, onDone }: { onClose: () => void; onDone: () => Promi
         await api('/pricing/benchmarks', { method: 'POST', body: { category, unit, amountGhs: n, reason } })
         await onDone()
       }}>
-      <div><label className="label" htmlFor="b-c">Category</label><input id="b-c" className="field" value={category} onChange={(e) => setCategory(e.target.value)} /></div>
+      <div><label className="label" htmlFor="b-c">Category</label><CategorySelect id="b-c" value={category} onChange={setCategory} /></div>
       <div><label className="label" htmlFor="b-u">Unit</label><select id="b-u" className="field" value={unit} onChange={(e) => setUnit(e.target.value as BenchmarkUnit)}>{BENCHMARK_UNITS.map((u) => <option key={u} value={u}>{BENCHMARK_UNIT_LABELS[u]}</option>)}</select></div>
       <div><label className="label" htmlFor="b-a">Amount in GHS</label><input id="b-a" className="field" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} /></div>
     </ActionDialog>
@@ -157,7 +158,7 @@ function AddBand({ onClose, onDone }: { onClose: () => void; onDone: () => Promi
           </>
         )}
       </div>
-      <div><label className="label" htmlFor="bd-c">Category</label><input id="bd-c" className="field" value={category} onChange={(e) => setCategory(e.target.value)} /></div>
+      <div><label className="label" htmlFor="bd-c">Category</label><CategorySelect id="bd-c" value={category} onChange={setCategory} /></div>
       <div className="grid grid-cols-2 gap-3">
         <div><label className="label" htmlFor="bd-min">From, GHS</label><input id="bd-min" className="field" inputMode="decimal" value={min} onChange={(e) => setMin(e.target.value)} /></div>
         <div><label className="label" htmlFor="bd-max">To, GHS</label><input id="bd-max" className="field" inputMode="decimal" value={max} onChange={(e) => setMax(e.target.value)} /></div>

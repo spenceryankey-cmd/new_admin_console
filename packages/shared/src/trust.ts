@@ -4,6 +4,37 @@ export const FLAG_CATEGORIES = ['no_show', 'conduct', 'quality', 'safety', 'pric
 export type FlagCategory = (typeof FLAG_CATEGORIES)[number]
 export const FLAG_CATEGORY_LABELS: Record<FlagCategory, string> = { no_show: 'No show', conduct: 'Conduct', quality: 'Quality of work', safety: 'Safety', pricing: 'Pricing', other: 'Other' }
 
+/** The fixed reasons that can be attached to feedback. The same list is a check constraint in migration 0010. */
+export const FEEDBACK_REASONS = [
+  'quality_work',
+  'communicated_well',
+  'left_site_clean',
+  'followed_instructions',
+  'poor_quality',
+  'poor_communication',
+  'left_site_dirty',
+  'ignored_instructions',
+  'safety_concern',
+] as const
+export type FeedbackReason = (typeof FEEDBACK_REASONS)[number]
+export const FEEDBACK_REASON_LABELS: Record<FeedbackReason, string> = {
+  quality_work: 'Good quality of work',
+  communicated_well: 'Communicated well',
+  left_site_clean: 'Left the site clean',
+  followed_instructions: 'Followed instructions',
+  poor_quality: 'Poor quality of work',
+  poor_communication: 'Poor communication',
+  left_site_dirty: 'Left the site untidy',
+  ignored_instructions: 'Did not follow instructions',
+  safety_concern: 'A safety concern',
+}
+export const FEEDBACK_REASON_GROUPS = {
+  good: ['quality_work', 'communicated_well', 'left_site_clean', 'followed_instructions'],
+  concern: ['poor_quality', 'poor_communication', 'left_site_dirty', 'ignored_instructions', 'safety_concern'],
+} as const satisfies Record<string, readonly FeedbackReason[]>
+/** A rating of 2 or lower must say why. */
+export const LOW_RATING_MAX = 2
+
 export const FLAG_STATUSES = ['open', 'investigating', 'upheld', 'dismissed', 'reviewed'] as const
 export type FlagStatus = (typeof FLAG_STATUSES)[number]
 export const FLAG_STATUS_LABELS: Record<FlagStatus, string> = { open: 'Open', investigating: 'Being investigated', upheld: 'Upheld', dismissed: 'Dismissed', reviewed: 'Reviewed with the flag' }

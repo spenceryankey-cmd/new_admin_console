@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { CHANGE_ORDER_STATUSES, FREQUENCIES, JOB_STATUSES, type ChangeOrderStatus, type Frequency, type JobStatus, type JobWatch, type Match } from './jobs'
 import type { PaymentStatus } from './requests'
 import { pairProblem } from './jobs'
+import { isCategoryLabel } from './catalogue'
 
 const reason = z.string().trim().min(3, 'Give a reason of at least 3 characters').max(1000)
 
@@ -40,7 +41,7 @@ export const recurringSchema = z.object({
   employerName: z.string().trim().min(2).max(120),
   employerPhone: z.string().trim().min(5).max(40),
   employerId: z.string().trim().max(80).optional(),
-  category: z.string().trim().min(2).max(120),
+  category: z.string().trim().refine(isCategoryLabel, 'Choose one of the listed categories'),
   description: z.string().trim().min(5).max(2000),
   location: z.string().trim().min(2).max(300),
   timing: z.string().trim().min(2).max(300),

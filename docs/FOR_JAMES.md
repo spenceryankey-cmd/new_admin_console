@@ -18,7 +18,7 @@ Never paste keys into chat, GitHub or email. Set them directly in Railway and Ve
 
 6. **Sensitive fields.** `prisonFacility`, `offenseLevel`, `offenseNotes` and `releaseDate` are dropped for good, so the main site can stop collecting them. The Ghana Card number is no longer on the Xpert record. It moves to a restricted table that the console cannot read, and the card number is stored only as its last four characters plus a keyed hash. The backend must never return them to a browser (the masked last four only).
 
-7. **Skills and categories.** The registration screens must offer only the codes in `service_category` and `task_type` (10 categories, 40 task types, field work only). Remote categories are gone. The catalogue is read only for everyone.
+7. **Skills and categories.** The console only accepts a request, recurring service, benchmark or price band whose `category` is exactly one of the ten labels in `catalog/categories.json` (for example `Facility & Cleaning`). Whatever the main site sends to the console must use those exact labels. The registration screens must offer only the codes in `service_category` and `task_type` (10 categories, 40 task types, field work only). Remote categories are gone. The catalogue is read only for everyone.
 
 8. **Allow one extra column on `notifications`.** Phase 3 adds a nullable `recipient_id` so the existing bell can reach one employer or one Xpert. The main site's reads keep working because the column is nullable.
 

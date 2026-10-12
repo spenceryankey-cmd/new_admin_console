@@ -8,7 +8,7 @@ end $$;
 create or replace function pg_temp.new_job() returns uuid language plpgsql as $$
 declare r uuid; q uuid; p uuid; j uuid;
 begin
-  insert into job_request(employer_name,employer_phone,category,description,location,timing,status) values ('Emp','024','Tiling','Floor','Madina','Mon','quoted') returning id into r;
+  insert into job_request(employer_name,employer_phone,category,description,location,timing,status) values ('Emp','024','Skilled Trades','Floor','Madina','Mon','quoted') returning id into r;
   insert into quote(request_id,version,status,total_ghs,lines,sent_at,valid_until) values (r,1,'sent',500,'[]',now(),now()+interval '3 days') returning id into q;
   perform quote_apply_response(q,'sent','accepted','employer',null,null);
   update payment set status='received', momo_reference='MP-' || r::text, received_at=now() where request_id = r;

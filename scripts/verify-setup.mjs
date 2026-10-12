@@ -49,11 +49,25 @@ for (const [file, tables] of [
   ['0003', ['benchmark_rate', 'price_band', 'job_request', 'quote', 'payment']],
   ['0004', ['job', 'assignment', 'change_order', 'recurring_service']],
   ['0005', ['coordinator', 'coordinator_xpert', 'flag', 'feedback']],
+  ['0009', ['service_category', 'task_type']],
 ]) {
   for (const t of tables) {
     const err = await exists(t)
     err ? bad(`Table ${t} exists`, `Run migration ${file} (supabase/migrations).`) : ok(`Table ${t} exists`)
   }
+}
+
+// The console's copy of the catalogue, and any older rows that do not match it.
+{
+  const [c, t, m] = await Promise.all([
+    db.from('service_category').select('code', { head: true, count: 'exact' }),
+    db.from('task_type').select('code', { head: true, count: 'exact' }),
+    db.from('catalogue_mismatches').select('table_name,row_id,category').limit(5),
+  ])
+  c.count === 10 && t.count === 40 ? ok('The console catalogue is seeded (10 categories, 40 task types)') : bad('The console catalogue is seeded (10 categories, 40 task types)', `Found ${c.count ?? 0} categories and ${t.count ?? 0} task types. Run supabase/migrations/0009_catalogue.sql.`)
+  if (m.error) bad('Category links are in place', 'Run supabase/migrations/0010_catalogue_links_feedback.sql.')
+  else if (m.data?.length) bad('Every saved category is on the list', `${m.data.length}+ older rows use a category that is not one of the ten (first: ${m.data[0].table_name} ${m.data[0].row_id}, "${m.data[0].category}"). Review them, then validate the constraints (see 0010).`)
+  else ok('Every saved category is on the list')
 }
 
 // 3. The hetzner database (Xpert records) ------------------------------------------------------

@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom'
 import { REQUEST_STATUSES, REQUEST_STATUS_LABELS, createRequestSchema, formatGhs, type RequestStatus, type RequestSummary } from '@beyondx/shared'
 import { useAuth } from '../auth/AuthProvider'
 import { ActionDialog, Button, EmptyState, ErrorState, PageHeader, Spinner } from '../components/ui'
+import { CategorySelect } from '../components/catalogue'
 import { RequestStatusBadge } from '../components/requests'
 import { api, errorText } from '../lib/api'
 import { dateTime } from '../lib/format'
@@ -98,7 +99,7 @@ function NewRequestDialog({ onClose, onDone }: { onClose: () => void; onDone: ()
     >
       <div><label className="label" htmlFor="rq-n">Employer name</label><input id="rq-n" className="field" value={f.employerName} onChange={set('employerName')} /></div>
       <div><label className="label" htmlFor="rq-p">Employer phone</label><input id="rq-p" className="field" value={f.employerPhone} onChange={set('employerPhone')} /></div>
-      <div><label className="label" htmlFor="rq-c">Category</label><input id="rq-c" className="field" placeholder="For example Tiling" value={f.category} onChange={set('category')} /></div>
+      <div><label className="label" htmlFor="rq-c">Category</label><CategorySelect id="rq-c" value={f.category} onChange={(v) => setF((x) => ({ ...x, category: v }))} /></div>
       <div><label className="label" htmlFor="rq-d">What needs doing</label><textarea id="rq-d" rows={3} className="field" value={f.description} onChange={set('description')} /></div>
       <div><label className="label" htmlFor="rq-l">Location</label><input id="rq-l" className="field" value={f.location} onChange={set('location')} /></div>
       <div><label className="label" htmlFor="rq-t">When</label><input id="rq-t" className="field" placeholder="For example Saturday morning" value={f.timing} onChange={set('timing')} /></div>

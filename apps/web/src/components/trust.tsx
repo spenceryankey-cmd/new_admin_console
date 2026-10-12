@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { FLAG_CATEGORIES, FLAG_CATEGORY_LABELS, FLAG_STATUS_LABELS, feedbackSchema, raiseFlagSchema, type FeedbackInput, type FlagCategory, type FlagRecord, type FlagStatus, type ReliabilityRecord } from '@beyondx/shared'
+import { FEEDBACK_REASON_GROUPS, FEEDBACK_REASON_LABELS, FLAG_CATEGORIES, FLAG_CATEGORY_LABELS, FLAG_STATUS_LABELS, LOW_RATING_MAX, feedbackSchema, raiseFlagSchema, taskTypesFor, type FeedbackInput, type FeedbackReason, type FlagCategory, type FlagRecord, type FlagStatus, type ReliabilityRecord } from '@beyondx/shared'
 import { useAuth } from '../auth/AuthProvider'
 import { ActionDialog, Badge, Button, ErrorState, Spinner } from './ui'
 import { api, errorText } from '../lib/api'
@@ -90,12 +90,16 @@ export function RaiseFlagDialog({ xpertId, jobId, onClose, onDone }: { xpertId: 
   )
 }
 
-export function FeedbackDialog({ jobId, onClose, onDone }: { jobId: string; onClose: () => void; onDone: () => Promise<unknown> }) {
+export function FeedbackDialog({ jobId, category, onClose, onDone }: { jobId: string; category: string; onClose: () => void; onDone: () => Promise<unknown> }) {
   const [side, setSide] = useState<'employer' | 'xpert'>('employer')
   const [rating, setRating] = useState('5')
   const [onTime, setOnTime] = useState('yes')
   const [again, setAgain] = useState('unknown')
   const [comment, setComment] = useState('')
+  const [reasons, setReasons] = useState<FeedbackReason[]>([])
+  const [task, setTask] = useState('')
+  const tasks = taskTypesFor(category)
+  const toggle = (r: FeedbackReason) => setReasons((cur) => (cur.includes(r) ? cur.filter((x) => x !== r) : [...cur, r]))
   const tri = (v: string) => (v === 'yes' ? true : v === 'no' ? false : null)
   return (
     <ActionDialog
@@ -105,7 +109,7 @@ export function FeedbackDialog({ jobId, onClose, onDone }: { jobId: string; onCl
       requireReason={false}
       onClose={onClose}
       onConfirm={async () => {
-        const parsed = feedbackSchema.safeParse({ jobId, side, rating: Number(rating), onTime: tri(onTime), wouldRepeat: tri(again), comment: comment || undefined } satisfies Partial<FeedbackInput>)
+        const parsed = feedbackSchema.safeParse({ jobId, side, rating: Number(rating), onTime: tri(onTime), wouldRepeat: tri(again), reasons, taskTypeCode: task || null, comment: comment || undefined } satisfies Partial<FeedbackInput>)
         if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? 'Check the details')
         await api('/feedback', { method: 'POST', body: parsed.data })
         await onDone()
@@ -115,6 +119,17 @@ export function FeedbackDialog({ jobId, onClose, onDone }: { jobId: string; onCl
       <div><label className="label" htmlFor="fb-r">Rating, 1 to 5</label><select id="fb-r" className="field" value={rating} onChange={(e) => setRating(e.target.value)}>{[5, 4, 3, 2, 1].map((n) => <option key={n} value={n}>{n}</option>)}</select></div>
       <div><label className="label" htmlFor="fb-t">On time</label><select id="fb-t" className="field" value={onTime} onChange={(e) => setOnTime(e.target.value)}><option value="yes">Yes</option><option value="no">No</option><option value="unknown">Not said</option></select></div>
       <div><label className="label" htmlFor="fb-a">Would use again</label><select id="fb-a" className="field" value={again} onChange={(e) => setAgain(e.target.value)}><option value="yes">Yes</option><option value="no">No</option><option value="unknown">Not said</option></select></div>
+      {tasks.length > 0 && (
+        <div><label className="label" htmlFor="fb-k">Task type (optional)</label><select id="fb-k" className="field" value={task} onChange={(e) => setTask(e.target.value)}><option value="">Not said</option>{tasks.map((t) => <option key={t.code} value={t.code}>{t.label}</option>)}</select></div>
+      )}
+      <fieldset>
+        <legend className="label">Reasons{Number(rating) <= LOW_RATING_MAX ? ' (choose at least one)' : ' (optional)'}</legend>
+        <div className="grid gap-1 sm:grid-cols-2">
+          {([...FEEDBACK_REASON_GROUPS.good, ...FEEDBACK_REASON_GROUPS.concern] as FeedbackReason[]).map((r) => (
+            <label key={r} className="flex min-h-[36px] items-center gap-2 text-sm text-ink-100"><input type="checkbox" checked={reasons.includes(r)} onChange={() => toggle(r)} />{FEEDBACK_REASON_LABELS[r]}</label>
+          ))}
+        </div>
+      </fieldset>
       <div><label className="label" htmlFor="fb-c">Comment (optional)</label><textarea id="fb-c" rows={2} className="field" value={comment} onChange={(e) => setComment(e.target.value)} /></div>
     </ActionDialog>
   )

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { EMPTY_RELIABILITY, isCleanJob, type CoordinatorRecord, type FeedbackRecord, type FlagRecord, type ReliabilityRecord } from '@beyondx/shared'
+import { SERVICE_CATEGORIES, EMPTY_RELIABILITY, isCleanJob, type CoordinatorRecord, type FeedbackRecord, type FlagRecord, type ReliabilityRecord } from '@beyondx/shared'
 import type { FakeJobStore } from '../jobs/fake.job.store'
 import { StoreError } from '../xperts/xpert.store'
 import type { FakeStore } from '../xperts/fake.store'
@@ -59,7 +59,7 @@ export class FakeTrustStore implements TrustStore {
   async createFeedback(i: any) {
     if (this.feedback.some((x) => x.jobId === i.jobId && x.side === i.side)) throw new StoreError('conflict', 'Feedback from that side has already been logged for this job.')
     const j = this.jobs.jobs.get(i.jobId)!
-    const r = { id: randomUUID(), jobId: i.jobId, jobLabel: `${j.category}, ${j.location}`, xpertId: j.xpertId, xpertName: null, side: i.side, rating: i.rating, onTime: i.onTime ?? null, wouldRepeat: i.wouldRepeat ?? null, comment: i.comment ?? null, createdAt: new Date().toISOString(), loggedByName: null }
+    const r = { id: randomUUID(), jobId: i.jobId, jobLabel: `${j.category}, ${j.location}`, xpertId: j.xpertId, xpertName: null, side: i.side, rating: i.rating, onTime: i.onTime ?? null, wouldRepeat: i.wouldRepeat ?? null, comment: i.comment ?? null, reasons: i.reasons ?? [], taskTypeCode: i.taskTypeCode ?? null, taskTypeLabel: SERVICE_CATEGORIES.flatMap((c) => c.tasks).find((t) => t.code === i.taskTypeCode)?.label ?? null, createdAt: new Date().toISOString(), loggedByName: null }
     this.feedback.push(r)
     // Keep the Xpert fake in step, as the database view would be.
     await this.syncClean(j.xpertId)

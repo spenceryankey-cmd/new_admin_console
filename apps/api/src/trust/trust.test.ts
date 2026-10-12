@@ -1,6 +1,6 @@
 import 'reflect-metadata'
 import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common'
-import { DEFAULT_ROLE_PERMISSIONS, can, isCleanJob, reviewTriggerFor, type Permission, type Role } from '@beyondx/shared'
+import { DEFAULT_ROLE_PERMISSIONS, can, isCleanJob, reviewTriggerFor, taskTypesFor, type Permission, type Role } from '@beyondx/shared'
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { StaffContext } from '../auth/staff-context'
 import { FakeJobStore } from '../jobs/fake.job.store'
@@ -31,12 +31,12 @@ beforeEach(() => {
   jobs = new JobsService(jstore, xstore, config, xperts)
   reqs = new RequestsService(rstore, xstore, config)
   trust = new TrustService(tstore, xstore, xperts)
-  xstore.addXpert('t1', 'provisional_active', { fullName: 'Yaw Tiler', homeArea: 'Madina', skills: ['Tiling'], accountActive: true })
-  xstore.addXpert('t2', 'full_active', { fullName: 'Kofi Tiler', homeArea: 'Madina', skills: ['Tiling'], accountActive: true })
+  xstore.addXpert('t1', 'provisional_active', { fullName: 'Yaw Tiler', homeArea: 'Madina', skills: ['Skilled Trades'], accountActive: true })
+  xstore.addXpert('t2', 'full_active', { fullName: 'Kofi Tiler', homeArea: 'Madina', skills: ['Skilled Trades'], accountActive: true })
 })
 
 async function completedJob(xpertId = 't1') {
-  const r = await reqs.create(ops, { employerName: 'Mr Adu', employerPhone: '0244000000', category: 'Tiling', description: 'Tile a floor', location: 'Madina', timing: 'Monday', photos: [] })
+  const r = await reqs.create(ops, { employerName: 'Mr Adu', employerPhone: '0244000000', category: 'Skilled Trades', description: 'Tile a floor', location: 'Madina', timing: 'Monday', photos: [] })
   await reqs.compose(ops, r.id, { lines: [{ description: 'Labour', amountGhs: 500 }], totalGhs: 500 })
   await reqs.send(ops, r.id)
   await reqs.respond(ops, r.id, { response: 'accepted' })
@@ -73,29 +73,48 @@ describe('rules', () => {
   })
 })
 
+describe('structured feedback', () => {
+  it('keeps the reasons and the task type, shown with its label', async () => {
+    const id = await completedJob()
+    const task = taskTypesFor('Skilled Trades')[0]!
+    const rec = await trust.logFeedback(ops, { jobId: id, side: 'employer', rating: 4, onTime: true, wouldRepeat: true, reasons: ['quality_work', 'left_site_clean'], taskTypeCode: task.code })
+    expect(rec.reasons).toEqual(['quality_work', 'left_site_clean'])
+    expect(rec.taskTypeCode).toBe(task.code)
+    expect(rec.taskTypeLabel).toBe(task.label)
+    const listed = (await trust.listFeedback({ limit: 10, offset: 0 })).feedback[0]!
+    expect(listed.reasons).toEqual(['quality_work', 'left_site_clean'])
+  })
+  it('refuses a task type that belongs to another category', async () => {
+    const id = await completedJob()
+    const other = taskTypesFor('Painting & Finishing')[0]!
+    await expect(trust.logFeedback(ops, { jobId: id, side: 'employer', rating: 5, onTime: null, wouldRepeat: null, reasons: [], taskTypeCode: other.code })).rejects.toBeInstanceOf(BadRequestException)
+    await expect(trust.logFeedback(ops, { jobId: id, side: 'employer', rating: 5, onTime: null, wouldRepeat: null, reasons: [], taskTypeCode: 'not.a_task' })).rejects.toBeInstanceOf(BadRequestException)
+  })
+})
+
 describe('clean jobs lift a provisional Xpert', () => {
   it('stays provisional with no feedback, then becomes fully active once the employer rates the job well', async () => {
     const id = await completedJob()
     await xperts.afterScreeningEvent('t1')
     expect((await xstore.getXpert('t1'))!.status).toBe('provisional_active')
-    await trust.logFeedback(ops, { jobId: id, side: 'employer', rating: 5, onTime: true, wouldRepeat: true })
+    await trust.logFeedback(ops, { jobId: id, side: 'employer', rating: 5, onTime: true, wouldRepeat: true, reasons: [], taskTypeCode: null })
     expect((await xstore.getXpert('t1'))!.status).toBe('full_active')
     expect((await trust.reliability('t1')).cleanJobs).toBe(1)
   })
   it('a poor rating does not lift them', async () => {
     const id = await completedJob()
-    await trust.logFeedback(ops, { jobId: id, side: 'employer', rating: 2, onTime: true, wouldRepeat: false })
+    await trust.logFeedback(ops, { jobId: id, side: 'employer', rating: 2, onTime: true, wouldRepeat: false, reasons: ['poor_quality'], taskTypeCode: null })
     expect((await xstore.getXpert('t1'))!.status).toBe('provisional_active')
   })
   it('an Xpert side rating does not count towards clean jobs', async () => {
     const id = await completedJob()
-    await trust.logFeedback(ops, { jobId: id, side: 'xpert', rating: 5, onTime: null, wouldRepeat: null })
+    await trust.logFeedback(ops, { jobId: id, side: 'xpert', rating: 5, onTime: null, wouldRepeat: null, reasons: [], taskTypeCode: null })
     expect((await xstore.getXpert('t1'))!.status).toBe('provisional_active')
   })
   it('refuses feedback before completion and a second copy from the same side', async () => {
     const id = await completedJob()
-    await trust.logFeedback(ops, { jobId: id, side: 'employer', rating: 5, onTime: true, wouldRepeat: null })
-    await expect(trust.logFeedback(ops, { jobId: id, side: 'employer', rating: 4, onTime: true, wouldRepeat: null })).rejects.toBeInstanceOf(ConflictException)
+    await trust.logFeedback(ops, { jobId: id, side: 'employer', rating: 5, onTime: true, wouldRepeat: null, reasons: [], taskTypeCode: null })
+    await expect(trust.logFeedback(ops, { jobId: id, side: 'employer', rating: 4, onTime: true, wouldRepeat: null, reasons: [], taskTypeCode: null })).rejects.toBeInstanceOf(ConflictException)
   })
 })
 
@@ -116,7 +135,7 @@ describe('flags', () => {
   })
   it('an upheld flag makes that job unclean', async () => {
     const id = await completedJob('t2')
-    await trust.logFeedback(ops, { jobId: id, side: 'employer', rating: 5, onTime: true, wouldRepeat: null })
+    await trust.logFeedback(ops, { jobId: id, side: 'employer', rating: 5, onTime: true, wouldRepeat: null, reasons: [], taskTypeCode: null })
     expect((await trust.reliability('t2')).cleanJobs).toBe(1)
     const f = await trust.raise(ops, { xpertId: 't2', jobId: id, raisedBy: 'employer', category: 'conduct', detail: 'Rude to the family' })
     await trust.decide(dm, f.flag.id, { outcome: 'upheld', note: 'Confirmed by two people', sendToReview: false })
@@ -145,7 +164,7 @@ describe('coordinators', () => {
     const a = await trust.createCoordinator(dm, { fullName: 'Coordinator A' })
     const b = await trust.createCoordinator(dm, { fullName: 'Coordinator B' })
     const id = await completedJob('t2')
-    await trust.logFeedback(ops, { jobId: id, side: 'employer', rating: 4, onTime: true, wouldRepeat: null })
+    await trust.logFeedback(ops, { jobId: id, side: 'employer', rating: 4, onTime: true, wouldRepeat: null, reasons: [], taskTypeCode: null })
     await trust.assign(dm, a.id, 't2', 'Vouched for by A')
     await trust.assign(dm, a.id, 't1', 'Vouched for by A')
     let d = await trust.coordinatorDetail(a.id)

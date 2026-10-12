@@ -82,3 +82,16 @@ Every job has a primary Xpert and a backup Xpert. The rules are in Supabase migr
 - **Existing live jobs** with no backup are not broken. They show Backup needed.
 
 Permission `dispatch.promote` is granted to ops reviewers, decision makers and super admin. Finance does not hold it.
+
+## Phase 7C: controlled category list and structured feedback
+
+**The catalogue.** `catalog/categories.json` is still the one source. `scripts/generate-catalog-seed.mjs` now writes three generated files from it: the hetzner seed, the console's own copy (`supabase/migrations/0009_catalogue.sql`) and `packages/shared/src/catalogue.ts`, which the screens and the API use. Run it again only if the owner approves a change to the list.
+
+- **Read only for everyone.** After the seed, a trigger refuses every insert, update, delete and truncate on `service_category` and `task_type`, for every database role. No screen, route or script in the console can add, rename or remove a category or task type. A change needs the owner's approval and a migration that says so.
+- **One list everywhere.** The request form, the benchmark rate form and the price band form use a dropdown of the ten categories. The API refuses any other value (requests, recurring services, benchmarks and bands). A test compares the shared list with the JSON file and with both database seeds.
+- **Database enforcement.** Migration 0010 adds a foreign key from each `category` column (`job_request`, `job`, `recurring_service`, `benchmark_rate`, `price_band`) to `service_category.label`. The keys are NOT VALID: new rows and any change to a category are checked straight away, and old rows are neither rejected nor rewritten. The view `catalogue_mismatches` lists old rows whose category is not one of the ten, and `scripts/verify-setup.mjs` reports them. When the view is empty, validate the constraints.
+- **Labels, not codes.** The console stores the category label, as it always has, because that is what the main site and the matching code use. The codes are the same in both databases.
+
+**Structured feedback.** Feedback still has a rating, on time, would use again and an optional comment. It now also has fixed reasons (nine, listed in `packages/shared/src/trust.ts` and as a check constraint in 0010) and an optional task type chosen from the job's own category. A rating of 2 or lower must carry at least one reason, and a reason can only be chosen once. The rules are in the database as well as the API. Existing feedback stays valid, and the clean job rule is unchanged.
+
+**Not changed.** The evidence checklists and the evidence form still use a free text task type (for example Tiling). That is a separate list from the catalogue and is left for your decision.

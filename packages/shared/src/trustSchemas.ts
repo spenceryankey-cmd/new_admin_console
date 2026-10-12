@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { FLAG_CATEGORIES, FLAG_RAISERS, FLAG_STATUSES, type FlagCategory, type FlagRaiser, type FlagStatus, type ReliabilityRecord } from './trust'
+import { FEEDBACK_REASONS, FLAG_CATEGORIES, FLAG_RAISERS, FLAG_STATUSES, LOW_RATING_MAX, type FeedbackReason, type FlagCategory, type FlagRaiser, type FlagStatus, type ReliabilityRecord } from './trust'
 
 const note = z.string().trim().min(3, 'Write at least 3 characters').max(1000)
 
@@ -34,14 +34,21 @@ export const flagListQuerySchema = z.object({
 })
 export type FlagListQuery = z.infer<typeof flagListQuerySchema>
 
-export const feedbackSchema = z.object({
+export const feedbackSchema = z
+  .object({
   jobId: z.string().uuid(),
   side: z.enum(['employer', 'xpert']),
   rating: z.number().int().min(1).max(5),
   onTime: z.boolean().nullable().default(null),
   wouldRepeat: z.boolean().nullable().default(null),
+  reasons: z.array(z.enum(FEEDBACK_REASONS)).max(FEEDBACK_REASONS.length).default([]),
+  taskTypeCode: z.string().trim().max(120).nullable().default(null),
   comment: z.string().trim().max(1000).optional(),
 })
+  .superRefine((v, ctx) => {
+    if (new Set(v.reasons).size !== v.reasons.length) ctx.addIssue({ code: 'custom', path: ['reasons'], message: 'Each reason can be chosen once.' })
+    if (v.rating <= LOW_RATING_MAX && v.reasons.length === 0) ctx.addIssue({ code: 'custom', path: ['reasons'], message: 'A rating of 2 or lower needs at least one reason.' })
+  })
 export type FeedbackInput = z.infer<typeof feedbackSchema>
 
 export const coordinatorSchema = z.object({
@@ -84,6 +91,9 @@ export type FeedbackRecord = {
   onTime: boolean | null
   wouldRepeat: boolean | null
   comment: string | null
+  reasons: FeedbackReason[]
+  taskTypeCode: string | null
+  taskTypeLabel: string | null
   createdAt: string
   loggedByName: string | null
 }

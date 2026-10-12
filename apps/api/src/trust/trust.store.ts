@@ -11,6 +11,7 @@ import type {
   ReliabilityRecord,
   TrustCounts,
 } from '@beyondx/shared'
+import { SERVICE_CATEGORIES } from '@beyondx/shared'
 import { SupabaseService } from '../supabase/supabase.service'
 import { StoreError } from '../xperts/xpert.store'
 
@@ -122,7 +123,8 @@ export class SupabaseTrustStore implements TrustStore {
       const { data } = await this.db.from('job').select('id,category,location,xpert_id').in('id', ids)
       for (const j of (data ?? []) as Row[]) jobs.set(j.id, j)
     }
-    return rows.map((r) => ({ id: r.id, jobId: r.job_id, jobLabel: jobs.get(r.job_id) ? `${jobs.get(r.job_id)!.category}, ${jobs.get(r.job_id)!.location}` : null, xpertId: jobs.get(r.job_id)?.xpert_id ?? null, xpertName: null, side: r.side, rating: r.rating, onTime: r.on_time, wouldRepeat: r.would_repeat, comment: r.comment, createdAt: r.created_at, loggedByName: r.logged_by ? (names.get(r.logged_by) ?? null) : null }))
+    const taskLabels = new Map(SERVICE_CATEGORIES.flatMap((c) => c.tasks.map((t) => [t.code, t.label] as const)))
+    return rows.map((r) => ({ id: r.id, jobId: r.job_id, jobLabel: jobs.get(r.job_id) ? `${jobs.get(r.job_id)!.category}, ${jobs.get(r.job_id)!.location}` : null, xpertId: jobs.get(r.job_id)?.xpert_id ?? null, xpertName: null, side: r.side, rating: r.rating, onTime: r.on_time, wouldRepeat: r.would_repeat, comment: r.comment, reasons: (r.reasons ?? []) as FeedbackRecord['reasons'], taskTypeCode: r.task_type_code ?? null, taskTypeLabel: r.task_type_code ? (taskLabels.get(r.task_type_code) ?? null) : null, createdAt: r.created_at, loggedByName: r.logged_by ? (names.get(r.logged_by) ?? null) : null }))
   }
   async feedbackList(f: { limit: number; offset: number; xpertId?: string }) {
     let jobIds: string[] | null = null
@@ -139,7 +141,7 @@ export class SupabaseTrustStore implements TrustStore {
     return { rows: await this.toFeedback((data ?? []) as Row[]), total: count ?? 0 }
   }
   async createFeedback(i: FeedbackInput, actorId: string) {
-    const { data, error } = await this.db.from('feedback').insert({ job_id: i.jobId, side: i.side, rating: i.rating, on_time: i.onTime, would_repeat: i.wouldRepeat, comment: i.comment ?? null, logged_by: actorId, updated_by: actorId, change_reason: 'Logged' }).select('*').single()
+    const { data, error } = await this.db.from('feedback').insert({ job_id: i.jobId, side: i.side, rating: i.rating, on_time: i.onTime, would_repeat: i.wouldRepeat, comment: i.comment ?? null, reasons: i.reasons, task_type_code: i.taskTypeCode, logged_by: actorId, updated_by: actorId, change_reason: 'Logged' }).select('*').single()
     if (error) {
       if (error.code === '23505') throw new StoreError('conflict', 'Feedback from that side has already been logged for this job.')
       fail('Could not save the feedback', error)
