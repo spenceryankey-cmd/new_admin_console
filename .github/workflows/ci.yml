@@ -36,4 +36,4 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: sudo apt-get update && sudo apt-get install -y postgresql-client
-      - run: CI_PG=1 scripts/db/test-migrations.sh scripts/db/test_0002a.sql scripts/db/test_0003.sql scripts/db/test_0004.sql scripts/db/test_0005.sql scripts/db/test_hardening.sql
+      - run: CI_PG=1 bash scripts/db/test-migrations.sh scripts/db/test_0002a.sql scripts/db/test_0003.sql scripts/db/test_0004.sql scripts/db/test_0005.sql scripts/db/test_hardening.sql
