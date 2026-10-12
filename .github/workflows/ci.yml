@@ -42,7 +42,7 @@ jobs:
       - run: npm ci
       - run: sudo apt-get update && sudo apt-get install -y postgresql-client
       - name: Console migrations (Supabase project)
-        run: CI_PG=1 bash scripts/db/test-migrations.sh scripts/db/test_0002a.sql scripts/db/test_0003.sql scripts/db/test_0004.sql scripts/db/test_0005.sql scripts/db/test_hardening.sql scripts/db/test_0006_0007.sql
+        run: CI_PG=1 bash scripts/db/test-migrations.sh scripts/db/test_0002a.sql scripts/db/test_0003.sql scripts/db/test_0004.sql scripts/db/test_0005.sql scripts/db/test_hardening.sql scripts/db/test_0006_0007.sql scripts/db/test_0008.sql
       - name: Hetzner migrations (Xpert database)
         run: CI_PG=1 bash scripts/db/test-hetzner.sh hetzner/tests/test_hetzner.sql
       - name: Postgres Xpert store against the hetzner schema
