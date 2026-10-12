@@ -7,6 +7,9 @@ import {
   confirmSchema,
   dispatchSchema,
   jobListQuerySchema,
+  noShowSchema,
+  promoteSchema,
+  setBackupSchema,
   recurringPatchSchema,
   recurringSchema,
   rejectChangeOrderSchema,
@@ -53,8 +56,26 @@ export class JobsController {
 
   @Post(':id/dispatch')
   @RequirePermissions('dispatch.match')
-  dispatch(@CurrentStaff() a: StaffContext, @Param('id', uuid) id: string, @Body(new ZodPipe(dispatchSchema)) b: { xpertId: string }) {
-    return this.svc.dispatch(a, id, b.xpertId)
+  dispatch(@CurrentStaff() a: StaffContext, @Param('id', uuid) id: string, @Body(new ZodPipe(dispatchSchema)) b: { xpertId: string; backupXpertId: string }) {
+    return this.svc.dispatch(a, id, b.xpertId, b.backupXpertId)
+  }
+
+  @Post(':id/backup')
+  @RequirePermissions('dispatch.match')
+  setBackup(@CurrentStaff() a: StaffContext, @Param('id', uuid) id: string, @Body(new ZodPipe(setBackupSchema)) b: { xpertId: string; reason?: string }) {
+    return this.svc.setBackup(a, id, b.xpertId, b.reason)
+  }
+
+  @Post(':id/promote-backup')
+  @RequirePermissions('dispatch.promote')
+  promote(@CurrentStaff() a: StaffContext, @Param('id', uuid) id: string, @Body(new ZodPipe(promoteSchema)) b: { reason: string }) {
+    return this.svc.promoteBackup(a, id, b.reason)
+  }
+
+  @Post(':id/no-show')
+  @RequirePermissions('dispatch.promote')
+  noShow(@CurrentStaff() a: StaffContext, @Param('id', uuid) id: string, @Body(new ZodPipe(noShowSchema)) b: { note?: string }) {
+    return this.svc.noShow(a, id, b.note)
   }
 
   @Post(':id/start')

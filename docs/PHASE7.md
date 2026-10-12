@@ -62,7 +62,23 @@ The main site's request form and the employer's answer to a quote should reach t
 
 ## Still open
 
-- Who owns requests, quotes, jobs, payments, feedback and coordinators for the main site: the console's tables, or the main site's existing Task, Dispatch, Payment, Review and Coordinator tables. This decides the intake API.
-- Whether the sensitive fields (`prisonFacility`, `offenseLevel` and the rest) should be imported into `xpert_restricted` or dropped. The import copies them unless `--skip-restricted` is given.
-- The status of existing active Xperts at import (provisionally or fully active).
+- Answered: the console owns requests, quotes, jobs, payments, feedback and coordinators. The main site will reach them through an intake API on the console, to be planned after 7C.
+- Answered: prison and offense fields are dropped for good (hetzner migration 0004). `xpert_restricted` keeps only the Ghana Card type, last four characters and keyed hash.
+- Answered: existing active Xperts are imported as provisionally active (`--existing-active-status=provisional_active`).
 - Where hetzner runs relative to the console API (same Railway project, or elsewhere), which decides `HETZNER_SSL`.
+
+## Phase 7B: primary and backup Xpert
+
+Every job has a primary Xpert and a backup Xpert. The rules are in Supabase migration `0008_primary_backup.sql` (not applied), so a screen or a script cannot get around them.
+
+- **Dispatch needs both.** `job_dispatch` takes a primary and a backup, which must be different Xperts. The old three argument function is dropped on purpose. The API also checks that both list the job's category and are active.
+- **One Xpert, one place.** Database indexes allow one active primary and one active backup per job, and an Xpert cannot hold both. `job.backup_xpert_id` mirrors the backup for quick reads.
+- **Replace the primary** works as before, leaves the backup in place, and cannot use the backup (use Promote backup).
+- **Promote backup** (`dispatch.promote`, a reason is required). The backup becomes the primary. The old primary stays in the history as replaced. The Xpert confirmation is cleared. The job then shows **Backup needed** until one is added with **Make this Xpert the backup**.
+- **No show** (`dispatch.promote`). The primary is recorded as a no show on the assignment. With a backup, the backup is promoted in the same transaction. With none, the job returns to Needs an Xpert. The database counts the Xpert's no shows inside the window.
+- **Under Review.** When the count reaches the limit, the API moves the Xpert to Under Review with the existing `no_shows` trigger, through the one status function. The Xpert's status lives in the hetzner database, so that move cannot share the job's transaction. If it fails, the hourly sweep makes the same move (`noShowReviews` in the sweep result), so a missed review is repaired.
+- **Settings, marked Pending:** `jobs.noShowWindowDays` (42, six weeks) and `jobs.noShowLimit` (2).
+- **Completing a job** completes the primary and withdraws a backup that was never needed. Workload counts only primary assignments.
+- **Existing live jobs** with no backup are not broken. They show Backup needed.
+
+Permission `dispatch.promote` is granted to ops reviewers, decision makers and super admin. Finance does not hold it.

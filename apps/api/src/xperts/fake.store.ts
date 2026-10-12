@@ -30,7 +30,9 @@ export class FakeStore implements XpertStore {
   async repairAuditMirror() { return 0 }
   async existingXpertIds(ids: string[]) { return new Set(ids.filter((i) => this.xperts.has(i))) }
 
+  failNextTransition = false
   async applyTransition(t: ApplyTransition) {
+    if (this.failNextTransition) { this.failNextTransition = false; throw new StoreError('failed', 'The hetzner database did not answer') }
     const x = this.xperts.get(t.xpertId)
     if (!x) throw new StoreError('not_found', 'nf')
     if (x.status !== t.expectedFrom) throw new StoreError('conflict', 'Status changed')

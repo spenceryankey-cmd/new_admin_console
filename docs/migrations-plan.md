@@ -17,6 +17,7 @@ Changes the other codebases must react to are listed per phase in the hand off n
 | 0005 flags, feedback, coordinators | 5 | Written, tested, not applied | `coordinator`, `coordinator_xpert`, `flag`, `feedback`, the reliability views, flag functions | None |
 | 0006 audit external ref | 7 | Written, tested, not applied | One unique index on `audit_log` | None |
 | 0007 remove quote sign off | 7 | Written, tested, not applied | Nothing | Revokes the `quotes.signoff` grants (rows kept, `granted = false`) |
+| 0008 primary and backup | 7B | Written, tested, not applied | `assignment.role`, `job.backup_xpert_id`, functions `job_set_backup`, `job_promote_backup`, `job_no_show`, two Pending settings, permission `dispatch.promote` | Replaces `job_dispatch` (now needs a backup), `job_replace` and `job_confirm`. Swaps the one active per job index for one per role. Adds status no_show to assignments |
 
 The 0002b and 0002c migrations that were to be generated from a schema export no longer exist. They assumed the Xpert records were in Supabase. They are replaced by the hetzner migrations below and the import script.
 
@@ -27,6 +28,7 @@ The 0002b and 0002c migrations that were to be generated from a schema export no
 | 0001 catalogue and identity | Written, tested, not applied | Roles `console_read`, `console_write`, `backend_app`; `audit_log`; `service_category`; `task_type`; `xpert`; `xpert_restricted`; `xpert_skill`; `employer`; row level security, audit and hard delete blocks on all of them |
 | 0002 seed catalogue | Written, tested, not applied | The 10 categories and 40 task types, generated from `catalog/categories.json` |
 | 0003 Xpert status | Written, tested, not applied | `xpert_status_history`, `xpert_apply_transition` |
+| 0004 Drop prison fields | Written, not applied | drops four columns from `xpert_restricted` |
 
 ## Conventions
 

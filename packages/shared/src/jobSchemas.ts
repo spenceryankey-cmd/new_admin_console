@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { CHANGE_ORDER_STATUSES, FREQUENCIES, JOB_STATUSES, type ChangeOrderStatus, type Frequency, type JobStatus, type JobWatch, type Match } from './jobs'
 import type { PaymentStatus } from './requests'
+import { pairProblem } from './jobs'
 
 const reason = z.string().trim().min(3, 'Give a reason of at least 3 characters').max(1000)
 
@@ -12,7 +13,16 @@ export const jobListQuerySchema = z.object({
 })
 export type JobListQuery = z.infer<typeof jobListQuerySchema>
 
-export const dispatchSchema = z.object({ xpertId: z.string().trim().min(1).max(80) })
+const xpertRef = z.string().trim().min(1).max(80)
+export const dispatchSchema = z
+  .object({ xpertId: xpertRef, backupXpertId: xpertRef })
+  .superRefine((v, ctx) => {
+    const problem = pairProblem(v.xpertId, v.backupXpertId)
+    if (problem) ctx.addIssue({ code: 'custom', message: problem, path: ['backupXpertId'] })
+  })
+export const setBackupSchema = z.object({ xpertId: xpertRef, reason: reason.optional() })
+export const promoteSchema = z.object({ reason })
+export const noShowSchema = z.object({ note: z.string().trim().max(500).optional() })
 export const replaceSchema = z.object({ xpertId: z.string().trim().min(1).max(80), reason })
 export const cancelJobSchema = z.object({ reason })
 export const confirmSchema = z.object({ side: z.enum(['employer', 'xpert']) })
@@ -52,6 +62,8 @@ export type JobRecord = {
   status: JobStatus
   xpertId: string | null
   xpertName: string | null
+  backupXpertId: string | null
+  backupXpertName: string | null
   employerName: string
   employerPhone: string
   dispatchedAt: string | null
@@ -64,7 +76,7 @@ export type JobRecord = {
   coordinatorId: string | null
   watch: JobWatch | null
 }
-export type AssignmentRecord = { id: string; jobId: string; xpertId: string; xpertName: string | null; status: 'active' | 'replaced' | 'completed' | 'withdrawn'; assignedAt: string; endedAt: string | null; endReason: string | null; assignedByName: string | null }
+export type AssignmentRecord = { id: string; jobId: string; xpertId: string; xpertName: string | null; role: 'primary' | 'backup'; status: 'active' | 'replaced' | 'completed' | 'withdrawn' | 'no_show'; assignedAt: string; endedAt: string | null; endReason: string | null; assignedByName: string | null }
 export type ChangeOrderRecord = { id: string; jobId: string; jobLabel: string | null; description: string; amountDeltaGhs: number; status: ChangeOrderStatus; employerConfirmedAt: string | null; xpertConfirmedAt: string | null; rejectedBy: 'employer' | 'xpert' | null; note: string | null; createdAt: string; loggedByName: string | null }
 export type RecurringRecord = { id: string; employerName: string; employerPhone: string; category: string; description: string; location: string; timing: string; frequency: Frequency; nextDue: string; active: boolean; lastGeneratedAt: string | null; due: boolean }
 export type JobDetail = { job: JobRecord; assignments: AssignmentRecord[]; changeOrders: ChangeOrderRecord[]; paymentStatus: PaymentStatus | null; matches: Match[] }

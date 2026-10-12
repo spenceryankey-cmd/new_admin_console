@@ -23,6 +23,22 @@ export const JOB_MOVES: readonly JobMove[] = [
 export const jobMove = (from: JobStatus, to: JobStatus) => JOB_MOVES.find((m) => m.from === from && m.to === to) ?? null
 /** An Xpert can be replaced only while one is on the job. */
 export const canReplace = (s: JobStatus) => s === 'dispatched' || s === 'in_progress'
+/** Promote backup, mark a no show and change the backup all need a primary on the job. */
+export const canPromote = canReplace
+
+/** Every job has a primary and a backup, and they must be two different Xperts. */
+export function pairProblem(primaryId: string, backupId: string | null | undefined): string | null {
+  const p = primaryId.trim()
+  const b = (backupId ?? '').trim()
+  if (!b) return 'Every job needs a backup Xpert as well as a primary Xpert.'
+  if (p === b) return 'The primary and the backup must be different Xperts.'
+  return null
+}
+
+/** Two no shows within the window (six weeks by default) send an Xpert to Under Review. */
+export const noShowLimitReached = (inWindow: number, limit: number) => inWindow >= limit
+
+export type NoShowResult = { promotedXpertId: string | null; noShowXpertId: string; noShowsInWindow: number; limit: number; windowDays: number; sentToReview: boolean }
 
 export const CHANGE_ORDER_STATUSES = ['logged', 'confirmed', 'rejected', 'cancelled'] as const
 export type ChangeOrderStatus = (typeof CHANGE_ORDER_STATUSES)[number]
@@ -77,17 +93,18 @@ export function matchXpert(i: MatchInput): Match | null {
   return { xpertId: i.xpert.id, fullName: i.xpert.fullName, status: i.xpert.status, homeArea: i.xpert.homeArea, skills: i.xpert.skills, activeJobs: i.activeJobs, band: i.band, price, sameArea, score, notes }
 }
 
-export type JobWatch = { kind: 'start_overdue' | 'confirmation_overdue'; label: string }
+export type JobWatch = { kind: 'start_overdue' | 'confirmation_overdue' | 'backup_needed'; label: string }
 export type MonitorConfig = { startOverdueHours: number; confirmationOverdueHours: number }
 export const DEFAULT_MONITOR_CONFIG: MonitorConfig = { startOverdueHours: 24, confirmationOverdueHours: 48 }
 
 /** What needs a person's attention on a live job. */
-export function watchJob(j: { status: JobStatus; dispatchedAt: string | null; employerConfirmedAt: string | null; xpertConfirmedAt: string | null }, now: Date, c: MonitorConfig): JobWatch | null {
+export function watchJob(j: { status: JobStatus; dispatchedAt: string | null; employerConfirmedAt: string | null; xpertConfirmedAt: string | null; backupXpertId?: string | null }, now: Date, c: MonitorConfig): JobWatch | null {
   const hours = (iso: string) => (now.getTime() - new Date(iso).getTime()) / 3_600_000
   if (j.status === 'dispatched' && j.dispatchedAt && hours(j.dispatchedAt) >= c.startOverdueHours) return { kind: 'start_overdue', label: `Not started ${Math.floor(hours(j.dispatchedAt))} hours after dispatch` }
   if (j.status === 'in_progress') {
     const first = [j.employerConfirmedAt, j.xpertConfirmedAt].filter((x): x is string => !!x)
     if (first.length === 1 && hours(first[0]!) >= c.confirmationOverdueHours) return { kind: 'confirmation_overdue', label: `Waiting ${Math.floor(hours(first[0]!))} hours for the ${j.employerConfirmedAt ? 'Xpert' : 'employer'} to confirm` }
   }
+  if ((j.status === 'dispatched' || j.status === 'in_progress') && !j.backupXpertId) return { kind: 'backup_needed', label: 'Backup needed' }
   return null
 }

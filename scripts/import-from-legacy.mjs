@@ -15,6 +15,7 @@
 //  - Nothing is guessed. A skill that does not match a catalogue label exactly is listed, not mapped.
 //  - The Ghana Card number is never copied. Only its type, its last four characters and a keyed hash
 //    (ID_HASH_SECRET) are stored.
+//  - Prison and offense fields are not imported (BeyondX no longer works with prisons).
 //  - Safe to repeat: rows already imported are skipped by id.
 //  - Each imported Xpert gets a history row saying where they came from.
 //  - The status of existing Xperts is a business decision, so --apply refuses to run without
@@ -69,7 +70,7 @@ try {
   const catByLabel = new Map(cats.map((c) => [norm(c.label), c]))
   const taskByLabel = new Map(tasks.map((t) => [norm(t.label), t]))
 
-  const W = await rows('Worker', ['id', 'workerId', 'fullName', 'pinHash', 'phone', 'prisonFacility', 'releaseDate', 'offenseLevel', 'offenseNotes', 'skills', 'bio', 'hasTools', 'dailyCharge', 'gpsVerified', 'idVerified', 'idVerificationRef', 'idType', 'idCardNumber', 'guarantorName', 'guarantorPhone', 'guarantorRelationship', 'lastActiveAt', 'photoUrl', 'homeArea', 'homeLat', 'homeLng', 'isActive', 'role', 'createdAt'])
+  const W = await rows('Worker', ['id', 'workerId', 'fullName', 'pinHash', 'phone', 'skills', 'bio', 'hasTools', 'dailyCharge', 'gpsVerified', 'idVerified', 'idVerificationRef', 'idType', 'idCardNumber', 'guarantorName', 'guarantorPhone', 'guarantorRelationship', 'lastActiveAt', 'photoUrl', 'homeArea', 'homeLat', 'homeLng', 'isActive', 'role', 'createdAt'])
   const E = await rows('Employer', ['id', 'email', 'passwordHash', 'orgName', 'contactPerson', 'phone', 'address', 'region', 'isVerified', 'logoUrl', 'acknowledgedAt', 'createdAt'])
   report.missingColumns = [...W.missing.map((c) => `Worker.${c}`), ...E.missing.map((c) => `Employer.${c}`)]
   report.xperts.read = W.rows.length
@@ -110,8 +111,8 @@ try {
     const card = w.idCardNumber ? String(w.idCardNumber).replace(/[^A-Za-z0-9]/g, '') : null
     const last4 = card && card.length >= 4 ? card.slice(-4) : null
     const idHash = card && SECRET ? createHmac('sha256', SECRET).update(card.toUpperCase()).digest('hex') : null
-    const hasRestricted = !skipRestricted && (w.prisonFacility || w.releaseDate || (w.offenseLevel && w.offenseLevel !== 'none') || w.offenseNotes)
-    if (hasRestricted || w.idType || last4 || w.idVerificationRef) report.restricted++
+    const hasRestricted = !skipRestricted && !!(w.idType || last4 || w.idVerificationRef)
+    if (hasRestricted) report.restricted++
 
     if (!apply) { report.xperts.inserted++; continue }
 
@@ -133,11 +134,11 @@ try {
     for (const [cat, task] of links) {
       await target.query('insert into xpert_skill (xpert_id, category_code, task_type_code) values ($1,$2,$3) on conflict do nothing', [w.id, cat, task])
     }
-    if (hasRestricted || w.idType || last4 || w.idVerificationRef) {
+    if (hasRestricted) {
       await target.query(
-        `insert into xpert_restricted (xpert_id, id_type, id_last4, id_hash, id_verification_ref, prison_facility, release_date, offense_level, offense_notes)
-         values ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-        [w.id, w.idType, last4, idHash, w.idVerificationRef, skipRestricted ? null : w.prisonFacility, skipRestricted ? null : w.releaseDate, skipRestricted || w.offenseLevel === 'none' ? null : w.offenseLevel, skipRestricted ? null : w.offenseNotes],
+        `insert into xpert_restricted (xpert_id, id_type, id_last4, id_hash, id_verification_ref)
+         values ($1,$2,$3,$4,$5)`,
+        [w.id, w.idType, last4, idHash, w.idVerificationRef],
       )
     }
     report.xperts.inserted++
@@ -176,7 +177,7 @@ if (process.exitCode !== 1) {
   for (const [s, n] of unmatched.slice(0, 50)) console.log(`  unmatched skill: "${s}" (${n})`)
   if (report.duplicatePhones.length) console.log(`Phone numbers used by more than one Xpert (imported without the phone, fix by hand): ${report.duplicatePhones.length}`)
   if (report.noPhone) console.log(`Xperts with no phone: ${report.noPhone}`)
-  console.log(`Sensitive rows ${skipRestricted ? 'skipped by request' : 'copied to the restricted table'}: ${report.restricted}`)
+  console.log(`Ghana Card details (type, last four, hash) ${skipRestricted ? 'skipped by request' : 'copied to the restricted table'}: ${report.restricted}`)
   if (report.missingColumns.length) console.log(`Columns not present in the legacy database (treated as empty): ${report.missingColumns.join(', ')}`)
   if (!apply) console.log('Run again with --apply and --existing-active-status=provisional_active or full_active to write.')
 }

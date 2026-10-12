@@ -4,7 +4,7 @@ insert into quote(request_id,version,status,total_ghs,lines,sent_at,valid_until)
 select quote_apply_response(:'q_id','sent','accepted','employer',null,null);
 update payment set status='received', momo_reference='MP1', received_at=now();
 select id from job \gset j_
-select job_dispatch(:'j_id','x1',null); select job_start(:'j_id',null);
+select job_dispatch(:'j_id','x1','b1',null); select job_start(:'j_id',null);
 select job_confirm(:'j_id','employer',null); select job_confirm(:'j_id','xpert',null);
 \echo no feedback yet (expect clean_jobs 0, completed 1):
 select xpert_id, jobs_completed, clean_jobs from xpert_reliability;

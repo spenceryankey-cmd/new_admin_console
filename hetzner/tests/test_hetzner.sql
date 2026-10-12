@@ -71,7 +71,7 @@ select pg_temp.expect_error($$select xpert_apply_transition(gen_random_uuid(), '
 reset role;
 
 \echo 5. the console reads, never secrets, never the restricted table
-insert into xpert_restricted (xpert_id, id_type, id_last4, offense_level, prison_facility) values (:'a_id', 'ghana_card', '1234', 'minor', 'Somewhere');
+insert into xpert_restricted (xpert_id, id_type, id_last4) values (:'a_id', 'ghana_card', '1234');
 set role console_read;
 select pg_temp.assert_true((select count(*) from xpert where deleted_at is null) >= 3, 'can read Xperts');
 select id, xpert_code, full_name, xpert_status, account_active from xpert limit 1;

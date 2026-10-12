@@ -4,7 +4,9 @@ import { SupabaseService } from '../supabase/supabase.service'
 import { StoreError } from '../xperts/xpert.store'
 
 export type JobFilter = { status?: JobStatus; q?: string; limit: number; offset: number }
-export type JobRow = Omit<JobRecord, 'watch' | 'xpertName'>
+export type JobRow = Omit<JobRecord, 'watch' | 'xpertName' | 'backupXpertName'>
+export type NoShowSettings = { windowDays: number; limit: number }
+export type NoShowOutcome = { noShowXpertId: string; promotedXpertId: string | null; noShowsInWindow: number; limit: number; windowDays: number }
 
 export interface JobStore {
   listJobs(f: JobFilter): Promise<{ rows: JobRow[]; total: number }>
@@ -15,7 +17,12 @@ export interface JobStore {
   bandsFor(category: string): Promise<Map<string, { minGhs: number; maxGhs: number }>>
   paymentStatus(paymentId: string): Promise<string | null>
 
-  rpcDispatch(jobId: string, xpertId: string, actorId: string): Promise<void>
+  rpcDispatch(jobId: string, xpertId: string, backupXpertId: string, actorId: string): Promise<void>
+  rpcSetBackup(jobId: string, xpertId: string, reason: string | null, actorId: string): Promise<void>
+  rpcPromoteBackup(jobId: string, reason: string, actorId: string): Promise<void>
+  rpcNoShow(jobId: string, note: string | null, actorId: string): Promise<NoShowOutcome>
+  /** Xperts whose no shows inside the window have reached the limit. Used by the sweep to repair a missed review. */
+  noShowsOverLimit(): Promise<{ xpertId: string; count: number; windowDays: number }[]>
   rpcStart(jobId: string, actorId: string): Promise<void>
   rpcReplace(jobId: string, xpertId: string, reason: string, actorId: string): Promise<void>
   rpcConfirm(jobId: string, side: 'employer' | 'xpert', actorId: string): Promise<{ completed: boolean }>
@@ -65,7 +72,7 @@ export class SupabaseJobStore implements JobStore {
     }
     return rows.map((r) => ({
       id: r.id, requestId: r.request_id, paymentId: r.payment_id, recurringId: r.recurring_id, category: r.category, location: r.location, timing: r.timing,
-      amountGhs: Number(r.amount_ghs), status: r.status, xpertId: r.xpert_id,
+      amountGhs: Number(r.amount_ghs), status: r.status, xpertId: r.xpert_id, backupXpertId: r.backup_xpert_id ?? null,
       employerName: reqs.get(r.request_id)?.employer_name ?? '', employerPhone: reqs.get(r.request_id)?.employer_phone ?? '',
       dispatchedAt: r.dispatched_at, startedAt: r.started_at, employerConfirmedAt: r.employer_confirmed_at, xpertConfirmedAt: r.xpert_confirmed_at,
       completedAt: r.completed_at, cancelledReason: r.cancelled_reason, createdAt: r.created_at, coordinatorId: r.coordinator_id ?? null,
@@ -98,12 +105,12 @@ export class SupabaseJobStore implements JobStore {
     if (error) fail('Could not read assignments', error)
     const rows = (data ?? []) as Row[]
     const names = await this.staffNames(rows.map((r) => r.assigned_by))
-    return rows.map((r) => ({ id: r.id, jobId: r.job_id, xpertId: r.xpert_id, xpertName: null, status: r.status, assignedAt: r.assigned_at, endedAt: r.ended_at, endReason: r.end_reason, assignedByName: r.assigned_by ? (names.get(r.assigned_by) ?? null) : null }))
+    return rows.map((r) => ({ id: r.id, jobId: r.job_id, xpertId: r.xpert_id, xpertName: null, role: (r.role ?? 'primary') as 'primary' | 'backup', status: r.status, assignedAt: r.assigned_at, endedAt: r.ended_at, endReason: r.end_reason, assignedByName: r.assigned_by ? (names.get(r.assigned_by) ?? null) : null }))
   }
   async activeLoad(xpertIds: string[]) {
     const out = new Map<string, number>()
     if (!xpertIds.length) return out
-    const { data, error } = await this.db.from('assignment').select('xpert_id').eq('status', 'active').in('xpert_id', xpertIds)
+    const { data, error } = await this.db.from('assignment').select('xpert_id').eq('status', 'active').eq('role', 'primary').in('xpert_id', xpertIds)
     if (error) fail('Could not read workloads', error)
     for (const r of (data ?? []) as Row[]) out.set(r.xpert_id, (out.get(r.xpert_id) ?? 0) + 1)
     return out
@@ -119,9 +126,36 @@ export class SupabaseJobStore implements JobStore {
     return (data as Row | null)?.status ?? null
   }
 
-  async rpcDispatch(jobId: string, xpertId: string, actorId: string) {
-    const { error } = await this.db.rpc('job_dispatch', { p_job_id: jobId, p_xpert_id: xpertId, p_actor: actorId })
+  async rpcDispatch(jobId: string, xpertId: string, backupXpertId: string, actorId: string) {
+    const { error } = await this.db.rpc('job_dispatch', { p_job_id: jobId, p_xpert_id: xpertId, p_backup_xpert_id: backupXpertId, p_actor: actorId })
     if (error) rpcError('Could not dispatch', error)
+  }
+  async rpcSetBackup(jobId: string, xpertId: string, reason: string | null, actorId: string) {
+    const { error } = await this.db.rpc('job_set_backup', { p_job_id: jobId, p_backup_xpert_id: xpertId, p_reason: reason, p_actor: actorId })
+    if (error) rpcError('Could not set the backup', error)
+  }
+  async rpcPromoteBackup(jobId: string, reason: string, actorId: string) {
+    const { error } = await this.db.rpc('job_promote_backup', { p_job_id: jobId, p_reason: reason, p_actor: actorId })
+    if (error) rpcError('Could not promote the backup', error)
+  }
+  async rpcNoShow(jobId: string, note: string | null, actorId: string) {
+    const { data, error } = await this.db.rpc('job_no_show', { p_job_id: jobId, p_note: note, p_actor: actorId })
+    if (error) rpcError('Could not record the no show', error)
+    const d = (data ?? {}) as Row
+    return { noShowXpertId: String(d.noShowXpert), promotedXpertId: (d.promoted as string | null) ?? null, noShowsInWindow: Number(d.noShowsInWindow), limit: Number(d.limit), windowDays: Number(d.windowDays) }
+  }
+  async noShowsOverLimit() {
+    const { data: cfg, error: ce } = await this.db.from('console_config').select('key,value').in('key', ['jobs.noShowWindowDays', 'jobs.noShowLimit'])
+    if (ce) fail('Could not read the no show settings', ce)
+    const get = (k: string, d: number) => Number(((cfg ?? []) as Row[]).find((r) => r.key === k)?.value ?? d)
+    const windowDays = get('jobs.noShowWindowDays', 42)
+    const limit = get('jobs.noShowLimit', 2)
+    const since = new Date(Date.now() - windowDays * 86_400_000).toISOString()
+    const { data, error } = await this.db.from('assignment').select('xpert_id').eq('status', 'no_show').gte('ended_at', since).limit(5000)
+    if (error) fail('Could not read no shows', error)
+    const counts = new Map<string, number>()
+    for (const r of (data ?? []) as Row[]) counts.set(r.xpert_id, (counts.get(r.xpert_id) ?? 0) + 1)
+    return [...counts].filter(([, n]) => n >= limit).map(([xpertId, count]) => ({ xpertId, count, windowDays }))
   }
   async rpcStart(jobId: string, actorId: string) {
     const { error } = await this.db.rpc('job_start', { p_job_id: jobId, p_actor: actorId })

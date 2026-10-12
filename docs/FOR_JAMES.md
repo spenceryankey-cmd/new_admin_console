@@ -16,7 +16,7 @@ Never paste keys into chat, GitHub or email. Set them directly in Railway and Ve
 
 5. **Never hard delete an Xpert row.** The console's records point at Xpert ids with no foreign key across the two databases, so a deleted row would leave orphans. The database blocks hard deletes on its own tables. Soft delete with `deleted_at`.
 
-6. **Sensitive fields.** `prisonFacility`, `offenseLevel`, `offenseNotes`, `releaseDate` and the Ghana Card number are no longer on the Xpert record. They move to a restricted table that the console cannot read, and the card number is stored only as its last four characters plus a keyed hash. The backend must never return them to a browser (the masked last four only).
+6. **Sensitive fields.** `prisonFacility`, `offenseLevel`, `offenseNotes` and `releaseDate` are dropped for good, so the main site can stop collecting them. The Ghana Card number is no longer on the Xpert record. It moves to a restricted table that the console cannot read, and the card number is stored only as its last four characters plus a keyed hash. The backend must never return them to a browser (the masked last four only).
 
 7. **Skills and categories.** The registration screens must offer only the codes in `service_category` and `task_type` (10 categories, 40 task types, field work only). Remote categories are gone. The catalogue is read only for everyone.
 

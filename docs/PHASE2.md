@@ -56,7 +56,7 @@ Status: built and tested. Not deployed. Two migrations are waiting to be shown a
 3. Does Under Review keep site access?
 4. How long a gap before reverification, and what it covers?
 5. Reference calls: 2 or 3 unanswered attempts. Clean jobs: 1 or 2.
-6. Should `prisonFacility` and `offenseLevel` (old Xpert fields) be visible to ops, decision makers only, or hidden? They are not shown anywhere today.
+6. (Answered later: dropped, see Phase 7.) Should `prisonFacility` and `offenseLevel` (old Xpert fields) be visible to ops, decision makers only, or hidden? They are not shown anywhere today.
 
 ## Tested
 

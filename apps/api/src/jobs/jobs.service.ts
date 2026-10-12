@@ -1,8 +1,11 @@
 import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException, UnprocessableEntityException } from '@nestjs/common'
 import {
   JOB_OPEN,
+  canPromote,
   canReplace,
   jobMove,
+  noShowLimitReached,
+  pairProblem,
   matchXpert,
   watchJob,
   type ChangeOrderInput,
@@ -12,11 +15,13 @@ import {
   type JobListQuery,
   type JobRecord,
   type Match,
+  type NoShowResult,
   type RecurringInput,
 } from '@beyondx/shared'
 import type { StaffContext } from '../auth/staff-context'
 import { ConfigService } from '../xperts/config.service'
 import { StoreError, XPERT_STORE, type XpertStore } from '../xperts/xpert.store'
+import { XpertsService } from '../xperts/xperts.service'
 import { JOB_STORE, type JobRow, type JobStore } from './job.store'
 
 async function guard<T>(run: () => Promise<T>): Promise<T> {
@@ -35,13 +40,19 @@ export class JobsService {
     @Inject(JOB_STORE) private readonly store: JobStore,
     @Inject(XPERT_STORE) private readonly xperts: XpertStore,
     private readonly config: ConfigService,
+    private readonly xpertsService: XpertsService,
   ) {}
 
   private async decorate(rows: JobRow[]): Promise<JobRecord[]> {
     const mon = await this.config.monitor()
-    const names = await this.xperts.xpertsByIds([...new Set(rows.map((r) => r.xpertId).filter((x): x is string => !!x))])
+    const names = await this.xperts.xpertsByIds([...new Set(rows.flatMap((r) => [r.xpertId, r.backupXpertId]).filter((x): x is string => !!x))])
     const now = new Date()
-    return rows.map((r) => ({ ...r, xpertName: r.xpertId ? (names.get(r.xpertId)?.fullName ?? null) : null, watch: watchJob(r, now, mon) }))
+    return rows.map((r) => ({
+      ...r,
+      xpertName: r.xpertId ? (names.get(r.xpertId)?.fullName ?? null) : null,
+      backupXpertName: r.backupXpertId ? (names.get(r.backupXpertId)?.fullName ?? null) : null,
+      watch: watchJob(r, now, mon),
+    }))
   }
 
   async list(q: JobListQuery) {
@@ -75,7 +86,7 @@ export class JobsService {
       assignments: assignments.map((a) => ({ ...a, xpertName: names.get(a.xpertId)?.fullName ?? null })),
       changeOrders,
       paymentStatus: paymentStatus as JobDetail['paymentStatus'],
-      matches: row.status === 'awaiting_dispatch' || canReplace(row.status) ? (await this.matches(row)).filter((m) => m.xpertId !== row.xpertId) : [],
+      matches: row.status === 'awaiting_dispatch' || canReplace(row.status) ? (await this.matches(row)).filter((m) => m.xpertId !== row.xpertId && m.xpertId !== row.backupXpertId) : [],
     }
   }
 
@@ -88,12 +99,61 @@ export class JobsService {
     if (!m) throw new UnprocessableEntityException('That Xpert does not list this category as a skill.')
   }
 
-  async dispatch(actor: StaffContext, id: string, xpertId: string) {
+  async dispatch(actor: StaffContext, id: string, xpertId: string, backupXpertId: string) {
     const job = await this.mustGet(id)
     if (!jobMove(job.status, 'dispatched')) throw new ConflictException(`A job that is ${job.status} cannot be dispatched.`)
+    const problem = pairProblem(xpertId, backupXpertId)
+    if (problem) throw new BadRequestException(problem)
     await this.mustBeMatch(job, xpertId)
-    await guard(() => this.store.rpcDispatch(id, xpertId, actor.userId))
+    await this.mustBeMatch(job, backupXpertId)
+    await guard(() => this.store.rpcDispatch(id, xpertId, backupXpertId, actor.userId))
     return this.detail(id)
+  }
+  /** Add a backup to a live job that has none, or change it (a reason is needed to change one). */
+  async setBackup(actor: StaffContext, id: string, xpertId: string, reason: string | undefined) {
+    const job = await this.mustGet(id)
+    if (!canPromote(job.status)) throw new ConflictException(`A job that is ${job.status} cannot take a backup.`)
+    if (job.xpertId === xpertId) throw new ConflictException('The backup must be a different Xpert from the primary.')
+    if (job.backupXpertId === xpertId) throw new ConflictException('That Xpert is already the backup.')
+    if (job.backupXpertId && (reason ?? '').trim().length < 3) throw new BadRequestException('Give a reason to change the backup.')
+    await this.mustBeMatch(job, xpertId)
+    await guard(() => this.store.rpcSetBackup(id, xpertId, reason?.trim() || null, actor.userId))
+    return this.detail(id)
+  }
+  async promoteBackup(actor: StaffContext, id: string, reason: string) {
+    const job = await this.mustGet(id)
+    if (!canPromote(job.status)) throw new ConflictException(`A job that is ${job.status} has no primary Xpert to replace.`)
+    if (!job.backupXpertId) throw new ConflictException('This job has no backup to promote.')
+    await guard(() => this.store.rpcPromoteBackup(id, reason, actor.userId))
+    return this.detail(id)
+  }
+  /**
+   * The primary did not turn up. The database promotes the backup, or sends the job back to Needs an Xpert,
+   * and counts this Xpert's no shows in the window. When the limit is reached the Xpert goes to Under Review
+   * through the one status function. That move lives in the hetzner database, so it cannot share the job
+   * transaction. If it fails, the hourly sweep makes the same move (reviewNoShows).
+   */
+  async noShow(actor: StaffContext, id: string, note: string | undefined): Promise<JobDetail & { noShow: NoShowResult }> {
+    const job = await this.mustGet(id)
+    if (!canPromote(job.status)) throw new ConflictException(`A job that is ${job.status} has no primary Xpert.`)
+    const o = await guard(() => this.store.rpcNoShow(id, note?.trim() || null, actor.userId))
+    let sentToReview = false
+    if (noShowLimitReached(o.noShowsInWindow, o.limit)) sentToReview = await this.moveToReview(o.noShowXpertId, o.noShowsInWindow, o.windowDays)
+    const noShow: NoShowResult = { promotedXpertId: o.promotedXpertId, noShowXpertId: o.noShowXpertId, noShowsInWindow: o.noShowsInWindow, limit: o.limit, windowDays: o.windowDays, sentToReview }
+    return { ...(await this.detail(id)), noShow }
+  }
+  private async moveToReview(xpertId: string, count: number, windowDays: number): Promise<boolean> {
+    try {
+      return await this.xpertsService.system(xpertId, 'under_review', 'no_shows', `${count} no shows within ${windowDays} days`)
+    } catch {
+      return false
+    }
+  }
+  /** Repairs a missed review: any active Xpert at or over the no show limit is moved to Under Review. */
+  async reviewNoShows(): Promise<number> {
+    let n = 0
+    for (const x of await this.store.noShowsOverLimit()) if (await this.xpertsService.system(x.xpertId, 'under_review', 'no_shows', `${x.count} no shows within ${x.windowDays} days`)) n++
+    return n
   }
   async start(actor: StaffContext, id: string) {
     await guard(() => this.store.rpcStart(id, actor.userId))
@@ -103,6 +163,7 @@ export class JobsService {
     const job = await this.mustGet(id)
     if (!canReplace(job.status)) throw new ConflictException(`A job that is ${job.status} has no Xpert to replace.`)
     if (job.xpertId === xpertId) throw new ConflictException('That Xpert is already on the job.')
+    if (job.backupXpertId === xpertId) throw new ConflictException('That Xpert is the backup. Use Promote backup instead.')
     await this.mustBeMatch(job, xpertId)
     await guard(() => this.store.rpcReplace(id, xpertId, reason, actor.userId))
     return this.detail(id)

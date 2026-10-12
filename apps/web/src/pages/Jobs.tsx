@@ -52,7 +52,7 @@ function JobRow({ j }: { j: JobRecord }) {
         <div className="min-w-0 flex-1 basis-56">
           <p className="text-sm font-semibold text-ink-50">{j.category} · {formatGhs(j.amountGhs)}</p>
           <p className="truncate text-sm text-ink-300">{j.employerName} · {j.location}</p>
-          <p className="mt-0.5 text-xs text-ink-400">{j.xpertName ? `Xpert: ${j.xpertName}` : 'No Xpert yet'} · Created {dateTime(j.createdAt)}</p>
+          <p className="mt-0.5 text-xs text-ink-400">{j.xpertName ? `Primary: ${j.xpertName}` : 'No Xpert yet'}{j.backupXpertName ? ` · Backup: ${j.backupXpertName}` : ''} · Created {dateTime(j.createdAt)}</p>
           {j.watch && <p className="mt-1 text-xs text-amber-400">{j.watch.label}</p>}
         </div>
         <JobStatusBadge status={j.status} />

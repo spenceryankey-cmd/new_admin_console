@@ -37,6 +37,10 @@ export class IntegrityService {
       if (error) throw new Error(`Could not read ${table}: ${error.message}`)
       refs.set(table, ((data ?? []) as { xpert_id: string }[]).map((r) => String(r.xpert_id)))
     }
+    // The backup Xpert on a job is a second Xpert id on the same table.
+    const { data: backups, error: be } = await this.supabase.admin.from('job').select('backup_xpert_id').not('backup_xpert_id', 'is', null).limit(20_000)
+    if (be) throw new Error(`Could not read job backups: ${be.message}`)
+    refs.set('job (backup)', ((backups ?? []) as { backup_xpert_id: string }[]).map((r) => String(r.backup_xpert_id)))
     const all = [...new Set([...refs.values()].flat())]
     const existing = new Set<string>()
     for (let i = 0; i < all.length; i += 500) {

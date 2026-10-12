@@ -11,13 +11,13 @@ Ops reviewers do the first pass work on screening, quoting, dispatch and monitor
 ## The payment loop in plain steps
 1. Employer accepts the quote (or staff log it from a call). The system creates a payment waiting for MoMo.
 2. Finance records the MoMo reference when the money arrives. That creates the job.
-3. Ops dispatch an Xpert, mark the job started, and log each side's confirmation when it comes in.
+3. Ops dispatch a primary Xpert and a different backup Xpert (both are needed), mark the job started, and log each side's confirmation when it comes in. If the primary cannot do the job, use Promote backup with a reason. If the primary does not turn up, use Mark a no show: the backup takes over, and two no shows inside six weeks send the Xpert to Under Review. The six weeks and the limit of two are Pending settings.
 4. When both have confirmed, the job completes and the payment shows as released. The console records state only. Finance makes the MoMo payout to the Xpert themselves.
 5. Log feedback from the completed job. Good employer feedback counts towards the Xpert becoming fully active.
 
 ## Backups and rollback
 - Turn on Supabase point in time recovery or daily backups for the project (Project Settings, Database, Backups). The console deletes nothing, so a backup is for disasters, not for undoing a click.
-- Mistakes are corrected by a new action with a reason (replace the Xpert, withdraw the quote, move the status), never by deleting. Every change is in the Audit log with who, when and why.
+- Mistakes are corrected by a new action with a reason (replace the Xpert, promote the backup, withdraw the quote, move the status), never by deleting. Every change is in the Audit log with who, when and why.
 - A migration is never edited after it has run. A fix is a new migration. No migration here drops data.
 - To roll back a bad deploy, redeploy the previous build in Railway or Vercel. The database stays as it is; the migrations are additive so older code keeps working.
 
@@ -41,7 +41,6 @@ These are built as settings or working values, marked Pending in Settings, so th
 - Whether Under Review keeps access to jobs.
 - The gap after which an Xpert must reverify.
 - How many reference calls before "unreachable" (working value 3) and how many clean jobs lift a provisional Xpert (working value 1).
-- Whether the prison facility and offence level fields are shown to ops.
 - Refund rules when a paid job is cancelled. Today the payment stays held and finance decides.
 - Notifying the employer when a quote is ready and the Xpert when dispatched. This needs the `notifications.recipient_id` column agreed with the backend owner.
 - The list of job categories, so benchmark rates and price bands line up with what Xperts list as skills.

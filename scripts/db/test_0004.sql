@@ -10,9 +10,9 @@ select status, amount_ghs from job;
 select id from job \gset j_
 \echo start before dispatch (expect ERROR):
 select job_start(:'j_id',null);
-select job_dispatch(:'j_id','x1',null);
+select job_dispatch(:'j_id','x1','b1',null);
 \echo second dispatch (expect ERROR):
-select job_dispatch(:'j_id','x2',null);
+select job_dispatch(:'j_id','x2','b2',null);
 select job_start(:'j_id',null);
 \echo replace without reason (expect ERROR):
 select job_replace(:'j_id','x2','',null);
