@@ -79,8 +79,15 @@ describe('migration seed', () => {
         for (const m of seed.matchAll(/\('([a-z_]+)',\s*'([a-z_.]+)'\)/g)) pairs.push(`${m[1]}:${m[2]}`)
       }
     }
+    // A later migration may revoke a permission for every role (update ... set granted = false where permission = '...').
+    const revoked = new Set<string>()
+    for (const f of readdirSync(dir).filter((n) => n.endsWith('.sql')).sort()) {
+      const sql = readFileSync(resolve(dir, f), 'utf8')
+      for (const m of sql.matchAll(/update public\.role_permission\s+set granted = false[^;]*?where permission = '([a-z_.]+)'/g)) revoked.add(m[1]!)
+    }
+    const kept = pairs.filter((p) => !revoked.has(p.split(':')[1]!))
     const expected = ROLES.flatMap((r) => DEFAULT_ROLE_PERMISSIONS[r].map((p) => `${r}:${p}`)).sort()
-    expect([...new Set(pairs)].sort()).toEqual(expected)
+    expect([...new Set(kept)].sort()).toEqual(expected)
   })
 })
 

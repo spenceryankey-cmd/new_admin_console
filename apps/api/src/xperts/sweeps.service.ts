@@ -4,8 +4,9 @@ import { XPERT_STORE, type XpertStore } from './xpert.store'
 import { XpertsService } from './xperts.service'
 import { RequestsService } from '../requests/requests.service'
 import { JobsService } from '../jobs/jobs.service'
+import { IntegrityService } from './integrity.service'
 
-export type SweepResult = { guarantorsImported: number; movedToGuarantorPending: number; closedAtDeadline: number; movedToSkillVerification: number; promotedToFullActive: number; quotesExpired: number; recurringGenerated: number }
+export type SweepResult = { guarantorsImported: number; movedToGuarantorPending: number; closedAtDeadline: number; movedToSkillVerification: number; promotedToFullActive: number; quotesExpired: number; recurringGenerated: number; auditCopied: number; orphanedReferences: number }
 
 const BATCH = 200
 
@@ -26,6 +27,7 @@ export class SweepsService implements OnModuleInit, OnModuleDestroy {
     @Inject(ENV) private readonly env: Env,
     private readonly requests: RequestsService,
     private readonly jobs: JobsService,
+    private readonly integrity: IntegrityService,
   ) {}
 
   onModuleInit() {
@@ -52,7 +54,7 @@ export class SweepsService implements OnModuleInit, OnModuleDestroy {
     if (this.running) throw new Error('A sweep is already running.')
     this.running = true
     try {
-      const out: SweepResult = { guarantorsImported: 0, movedToGuarantorPending: 0, closedAtDeadline: 0, movedToSkillVerification: 0, promotedToFullActive: 0, quotesExpired: 0, recurringGenerated: 0 }
+      const out: SweepResult = { guarantorsImported: 0, movedToGuarantorPending: 0, closedAtDeadline: 0, movedToSkillVerification: 0, promotedToFullActive: 0, quotesExpired: 0, recurringGenerated: 0, auditCopied: 0, orphanedReferences: 0 }
 
       for (const x of await this.store.xpertsByStatus('applied', BATCH)) {
         let g = await this.store.liveGuarantor(x.id)
@@ -82,6 +84,12 @@ export class SweepsService implements OnModuleInit, OnModuleDestroy {
       }
       out.quotesExpired = await this.requests.expireDue()
       out.recurringGenerated = await this.jobs.generateDue()
+      // Copy any status change audit rows the console missed (the status and history are already safe in the Xpert database).
+      out.auditCopied = await this.store.repairAuditMirror(new Date(Date.now() - 48 * 3_600_000))
+      // Report, never fix, ids that point at an Xpert that does not exist.
+      const report = await this.integrity.check()
+      out.orphanedReferences = report.orphans.length
+      if (report.orphans.length > 0) this.log.warn(`Orphaned Xpert references: ${report.orphans.slice(0, 20).map((o) => `${o.table}:${o.xpertId}`).join(', ')}`)
       return out
     } finally {
       this.running = false

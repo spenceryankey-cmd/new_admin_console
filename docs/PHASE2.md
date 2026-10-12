@@ -1,3 +1,5 @@
+> Update (Phase 7A): the Xpert records live in the hetzner database, not in Supabase. The `0002b` and `0002c` migrations described here, the `XPERT_*` settings and `scripts/generate-0002b.mjs` were replaced by `hetzner/migrations`, the `HETZNER_*` settings and `scripts/import-from-legacy.mjs`. See docs/PHASE7.md. The rest of this page is kept as the record of what Phase 2 decided.
+
 # Phase 2: Xpert pipeline and screening
 
 Status: built and tested. Not deployed. Two migrations are waiting to be shown and run.

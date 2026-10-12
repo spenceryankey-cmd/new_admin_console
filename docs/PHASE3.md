@@ -5,7 +5,7 @@ Status: built and tested. Not deployed. Migration 0003 is waiting to be shown an
 ## Decisions applied
 
 - Quote composing: every role that can see the dashboard (operations reviewer, decision maker, finance approver, super admin). A super admin can still remove it from a role on the Roles screen. The "decision pending" marker is gone.
-- Finance sign off above a price band: not needed, so there is no approval step. The `quotes.signoff` permission still exists and nothing uses it. Remove it later if it stays unused.
+- Finance sign off above a price band: removed on purpose. It is not part of this product, so there is no approval step for a quote above an Xpert's price band. The `quotes.signoff` permission was removed from the shared package, the role defaults, the API and the Roles screen, and migration 0007 deletes its role rows. Quote composing (`quotes.compose`) is held by every role that can see the dashboard, including finance.
 - Quote validity: three days, kept in Settings so it can change without a release.
 - Payment method: MoMo only.
 

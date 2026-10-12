@@ -16,6 +16,7 @@ import { ConfigService } from '../xperts/config.service'
 import { FakeStore } from '../xperts/fake.store'
 import { ScreeningService } from '../xperts/screening.service'
 import { SweepsService } from '../xperts/sweeps.service'
+import { IntegrityService } from '../xperts/integrity.service'
 import { PricingController, RequestsController } from '../requests/requests.controller'
 import { FakeRequestStore } from '../requests/fake.request.store'
 import { REQUEST_STORE } from '../requests/request.store'
@@ -98,6 +99,7 @@ const staff = { userId: uid, email: 'root@beyondxco.com', fullName: 'Spencer Yan
     { provide: AccessService, useValue: { loadStaff: async () => staff } },
     { provide: TOKEN_VERIFIER, useValue: { verify: async () => uid } },
     ConfigService, XpertsService, ScreeningService, SweepsService,
+    { provide: IntegrityService, useValue: { check: async () => ({ checked: 0, orphans: [] }) } },
     { provide: APP_GUARD, useClass: AuthGuard },
     { provide: APP_GUARD, useClass: PermissionsGuard },
   ],

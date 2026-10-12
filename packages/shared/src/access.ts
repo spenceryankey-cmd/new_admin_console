@@ -30,7 +30,6 @@ export const PERMISSIONS = [
   'reliability.read',
   'quotes.read',
   'quotes.compose',
-  'quotes.signoff',
   'payments.record',
   'pricing.bands.edit',
   'benchmarks.edit',
@@ -64,7 +63,6 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   'reliability.read': 'View reliability records',
   'quotes.read': 'View requests and quotes',
   'quotes.compose': 'Prepare and send quotes',
-  'quotes.signoff': 'Sign off quotes above an Xpert price band',
   'payments.record': 'Record that an employer payment has arrived',
   'pricing.bands.edit': 'Edit Xpert price bands',
   'benchmarks.edit': 'Edit benchmark rates',
@@ -123,7 +121,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'coordinators.manage',
     'feedback.read',
   ],
-  finance_approver: ['dashboard.view', 'quotes.read', 'quotes.compose', 'quotes.signoff', 'payments.record', 'jobs.monitor', 'reliability.read'],
+  finance_approver: ['dashboard.view', 'quotes.read', 'quotes.compose', 'payments.record', 'jobs.monitor', 'reliability.read'],
   super_admin: PERMISSIONS,
 }
 

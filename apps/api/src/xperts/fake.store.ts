@@ -27,6 +27,8 @@ export class FakeStore implements XpertStore {
   async xpertsByIds(ids: string[]) { return new Map(ids.flatMap((i) => (this.xperts.has(i) ? [[i, this.xperts.get(i)!] as const] : []))) }
   async xpertsByStatus(s: XpertStatus) { return [...this.xperts.values()].filter((x) => x.status === s) }
   async legacyGuarantor(id: string) { return this.legacy[id] ?? null }
+  async repairAuditMirror() { return 0 }
+  async existingXpertIds(ids: string[]) { return new Set(ids.filter((i) => this.xperts.has(i))) }
 
   async applyTransition(t: ApplyTransition) {
     const x = this.xperts.get(t.xpertId)

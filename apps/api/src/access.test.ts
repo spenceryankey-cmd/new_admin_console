@@ -14,7 +14,7 @@ import { assertStaffChangeAllowed } from './staff/staff.rules'
 class Open {
   @Public() health() {}
   @AnyStaff() me() {}
-  @RequirePermissions('quotes.signoff') signoff() {}
+  @RequirePermissions('payments.record') recordPayment() {}
   @RequirePermissions('xperts.read', 'quotes.read') both() {}
   forgotten() {}
 }
@@ -43,10 +43,10 @@ describe('PermissionsGuard', () => {
   })
 
   it('requires the named permission', () => {
-    const ok = staff('finance_approver', new Set(['quotes.signoff']))
+    const ok = staff('finance_approver', new Set(['payments.record']))
     const no = staff('ops_reviewer', new Set(['quotes.read']))
-    expect(guard.canActivate(ctx('signoff', { headers: {}, staff: ok }))).toBe(true)
-    expect(() => guard.canActivate(ctx('signoff', { headers: {}, staff: no }))).toThrow(ForbiddenException)
+    expect(guard.canActivate(ctx('recordPayment', { headers: {}, staff: ok }))).toBe(true)
+    expect(() => guard.canActivate(ctx('recordPayment', { headers: {}, staff: no }))).toThrow(ForbiddenException)
   })
 
   it('requires every listed permission', () => {
@@ -55,7 +55,7 @@ describe('PermissionsGuard', () => {
   })
 
   it('lets super_admin through any permission route', () => {
-    expect(guard.canActivate(ctx('signoff', { headers: {}, staff: staff('super_admin') }))).toBe(true)
+    expect(guard.canActivate(ctx('recordPayment', { headers: {}, staff: staff('super_admin') }))).toBe(true)
   })
 
   it('refuses a route with no access decorator, even for super_admin', () => {
@@ -63,7 +63,7 @@ describe('PermissionsGuard', () => {
   })
 
   it('refuses when no staff member is attached', () => {
-    expect(() => guard.canActivate(ctx('signoff', { headers: {} }))).toThrow(ForbiddenException)
+    expect(() => guard.canActivate(ctx('recordPayment', { headers: {} }))).toThrow(ForbiddenException)
   })
 })
 
@@ -128,20 +128,29 @@ describe('loadEnv', () => {
     SUPABASE_URL: 'https://abc.supabase.co',
     SUPABASE_SERVICE_ROLE_KEY: 'x'.repeat(40),
     WEB_APP_URL: 'https://admin.example.com',
-    XPERT_TABLE: 'xpert_records',
+    HETZNER_DATABASE_URL: 'postgres://console_reader:pw@db.internal:5432/hetzner',
+    HETZNER_WRITE_DATABASE_URL: 'postgres://console_writer:pw@db.internal:5432/hetzner',
   }
-  it('accepts a complete environment and defaults the port', () => {
-    expect(loadEnv(good).PORT).toBe(3000)
+  it('accepts a complete environment and defaults the port and TLS mode', () => {
+    const env = loadEnv(good)
+    expect(env.PORT).toBe(3000)
+    expect(env.HETZNER_SSL).toBe('require')
   })
-  it('requires the Xpert table name rather than guessing it', () => {
-    const { XPERT_TABLE: _omit, ...without } = good
-    expect(() => loadEnv(without)).toThrow(/XPERT_TABLE/)
+  it('requires both database connections rather than guessing them', () => {
+    const { HETZNER_DATABASE_URL: _r, ...noRead } = good
+    const { HETZNER_WRITE_DATABASE_URL: _w, ...noWrite } = good
+    expect(() => loadEnv(noRead)).toThrow(/HETZNER_DATABASE_URL/)
+    expect(() => loadEnv(noWrite)).toThrow(/HETZNER_WRITE_DATABASE_URL/)
   })
-  it('refuses table names that are not plain identifiers', () => {
-    expect(() => loadEnv({ ...good, XPERT_TABLE: 'x; drop table y' })).toThrow(/XPERT_TABLE/)
+  it('refuses a connection value that is not a postgres connection string', () => {
+    expect(() => loadEnv({ ...good, HETZNER_DATABASE_URL: 'mysql://x' })).toThrow(/HETZNER_DATABASE_URL/)
+  })
+  it('only accepts the known TLS modes', () => {
+    expect(loadEnv({ ...good, HETZNER_SSL: 'disable' }).HETZNER_SSL).toBe('disable')
+    expect(() => loadEnv({ ...good, HETZNER_SSL: 'maybe' })).toThrow(/HETZNER_SSL/)
   })
   it('treats an empty optional variable as unset', () => {
-    expect(loadEnv({ ...good, XPERT_AREA_COLUMN: '' }).XPERT_AREA_COLUMN).toBeUndefined()
+    expect(loadEnv({ ...good, HETZNER_CA_CERT: '' }).HETZNER_CA_CERT).toBeUndefined()
   })
   it('fails fast with a readable message', () => {
     expect(() => loadEnv({ ...good, SUPABASE_URL: 'nope' })).toThrow(/Invalid environment/)

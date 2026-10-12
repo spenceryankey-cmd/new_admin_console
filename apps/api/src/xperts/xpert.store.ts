@@ -13,7 +13,6 @@ import type {
   XpertStatus,
   XpertSummary,
 } from '@beyondx/shared'
-import { ENV, type Env } from '../config/env'
 import { SupabaseService } from '../supabase/supabase.service'
 
 /** A domain failure the controllers turn into an HTTP error. */
@@ -50,6 +49,10 @@ export interface XpertStore {
   legacyGuarantor(xpertId: string): Promise<{ name: string; contact: string; relationship: string | null; namedAt: string | null } | null>
 
   applyTransition(t: ApplyTransition): Promise<void>
+  /** Copies status change audit rows from the Xpert database that the console log missed. Returns how many were added. */
+  repairAuditMirror(since: Date): Promise<number>
+  /** Which of these Xpert ids exist in the Xpert database. */
+  existingXpertIds(ids: string[]): Promise<Set<string>>
   history(xpertId: string): Promise<StatusHistoryRow[]>
   lastEntered(xpertIds: string[], status: XpertStatus): Promise<Map<string, string>>
 
@@ -91,164 +94,113 @@ const fail = (what: string, error: { message: string } | null): never => {
   throw new StoreError('failed', `${what}: ${error?.message ?? 'unknown error'}`)
 }
 
-@Injectable()
-export class SupabaseXpertStore implements XpertStore {
-  private readonly nameCols: string[]
+/**
+ * The records the console reads and changes in the hetzner database: the Xpert, their status and its history.
+ * Everything else the store holds lives in the console's own Supabase project.
+ */
+export interface XpertRecords {
+  list(f: ListFilter): Promise<{ rows: XpertSummary[]; total: number }>
+  get(id: string): Promise<XpertSummary | null>
+  byIds(ids: string[]): Promise<Map<string, XpertSummary>>
+  byStatus(status: XpertStatus, limit: number): Promise<XpertSummary[]>
+  legacyGuarantor(xpertId: string): Promise<{ name: string; contact: string; relationship: string | null; namedAt: string | null } | null>
+  /** Changes the status and writes the history and audit rows in one transaction. Returns the history row id. */
+  applyTransition(t: ApplyTransition): Promise<number>
+  history(xpertId: string): Promise<Omit<StatusHistoryRow, 'changedByName'>[]>
+  lastEntered(xpertIds: string[], status: XpertStatus): Promise<Map<string, string>>
+  countByStatus(status: XpertStatus): Promise<number>
+  /** Which of these ids exist. Used to catch orphaned or mistyped ids, which no foreign key can. */
+  existingIds(ids: string[]): Promise<Set<string>>
+  /** Status change audit rows newer than the given time, so the console can copy any it missed. */
+  recentStatusAudit(since: Date): Promise<StatusAuditRow[]>
+}
 
+export type StatusAuditRow = {
+  externalRef: string
+  at: string
+  actorId: string | null
+  xpertId: string
+  before: unknown
+  after: unknown
+  reason: string | null
+}
+
+export const XPERT_RECORDS = Symbol('XPERT_RECORDS')
+
+@Injectable()
+export class ConsoleXpertStore implements XpertStore {
   constructor(
     private readonly supabase: SupabaseService,
-    @Inject(ENV) private readonly env: Env,
-  ) {
-    this.nameCols = env.XPERT_NAME_COLUMNS.split(',')
-  }
+    @Inject(XPERT_RECORDS) private readonly records: XpertRecords,
+  ) {}
 
   private get db() {
     return this.supabase.admin
   }
 
-  // Xpert records ---------------------------------------------------------------
-  private xpertSelect(): string {
-    const e = this.env
-    const parts = [
-      `xp_id:${e.XPERT_ID_COLUMN}`,
-      ...this.nameCols.map((c, i) => `xp_n${i}:${c}`),
-      `xp_phone:${e.XPERT_PHONE_COLUMN}`,
-      `xp_created:${e.XPERT_CREATED_COLUMN}`,
-      'xpert_status',
-      'account_active',
-      'activated_at',
-      'verification_source',
-    ]
-    if (e.XPERT_AREA_COLUMN) parts.push(`xp_area:${e.XPERT_AREA_COLUMN}`)
-    if (e.XPERT_SKILLS_COLUMN) parts.push(`xp_skills:${e.XPERT_SKILLS_COLUMN}`)
-    return parts.join(',')
-  }
-
-  private toXpert(r: Row): XpertSummary {
-    const skills = r.xp_skills
-    return {
-      id: String(r.xp_id),
-      fullName: this.nameCols.map((_, i) => r[`xp_n${i}`]).filter(Boolean).join(' ').trim() || 'Unnamed',
-      phone: r.xp_phone ?? null,
-      homeArea: r.xp_area ?? null,
-      skills: Array.isArray(skills) ? skills.map(String) : typeof skills === 'string' && skills ? skills.split(',').map((s) => s.trim()) : [],
-      status: r.xpert_status,
-      accountActive: !!r.account_active,
-      verificationSource: r.verification_source ?? null,
-      activatedAt: r.activated_at ?? null,
-      createdAt: r.xp_created ?? null,
-      statusSince: null,
-    }
-  }
-
-  async listXperts(f: ListFilter) {
-    let q = this.db.from(this.env.XPERT_TABLE).select(this.xpertSelect(), { count: 'exact' })
-    if (f.status) q = q.eq('xpert_status', f.status)
-    if (f.q) {
-      const safe = f.q.replace(/[^\p{L}\p{N} +@.-]/gu, '')
-      if (safe) {
-        const cols = [...this.nameCols, this.env.XPERT_PHONE_COLUMN]
-        q = q.or(cols.map((c) => `${c}.ilike.%${safe}%`).join(','))
-      }
-    }
-    const { data, error, count } = await q
-      .order(this.env.XPERT_CREATED_COLUMN, { ascending: false })
-      .range(f.offset, f.offset + f.limit - 1)
-    if (error) fail('Could not read Xperts', error)
-    return { rows: ((data ?? []) as unknown as Row[]).map((r) => this.toXpert(r)), total: count ?? 0 }
-  }
-
-  async getXpert(id: string) {
-    const { data, error } = await this.db.from(this.env.XPERT_TABLE).select(this.xpertSelect()).eq(this.env.XPERT_ID_COLUMN, id).maybeSingle()
-    if (error) fail('Could not read the Xpert', error)
-    return data ? this.toXpert(data as unknown as Row) : null
-  }
-
-  async xpertsByIds(ids: string[]) {
-    const out = new Map<string, XpertSummary>()
-    if (ids.length === 0) return out
-    const { data, error } = await this.db.from(this.env.XPERT_TABLE).select(this.xpertSelect()).in(this.env.XPERT_ID_COLUMN, ids)
-    if (error) fail('Could not read Xperts', error)
-    for (const r of (data ?? []) as unknown as Row[]) {
-      const x = this.toXpert(r)
-      out.set(x.id, x)
-    }
-    return out
-  }
-
-  async xpertsByStatus(status: XpertStatus, limit: number) {
-    const { data, error } = await this.db
-      .from(this.env.XPERT_TABLE)
-      .select(this.xpertSelect())
-      .eq('xpert_status', status)
-      .order(this.env.XPERT_CREATED_COLUMN, { ascending: true })
-      .limit(limit)
-    if (error) fail('Could not read Xperts', error)
-    return ((data ?? []) as unknown as Row[]).map((r) => this.toXpert(r))
-  }
-
-  async legacyGuarantor(xpertId: string) {
-    const e = this.env
-    if (!e.XPERT_GUARANTOR_NAME_COLUMN || !e.XPERT_GUARANTOR_CONTACT_COLUMN) return null
-    const cols = [`g_name:${e.XPERT_GUARANTOR_NAME_COLUMN}`, `g_contact:${e.XPERT_GUARANTOR_CONTACT_COLUMN}`, `g_created:${e.XPERT_CREATED_COLUMN}`]
-    if (e.XPERT_GUARANTOR_RELATIONSHIP_COLUMN) cols.push(`g_rel:${e.XPERT_GUARANTOR_RELATIONSHIP_COLUMN}`)
-    const { data, error } = await this.db.from(e.XPERT_TABLE).select(cols.join(',')).eq(e.XPERT_ID_COLUMN, xpertId).maybeSingle()
-    if (error) fail('Could not read the guarantor details', error)
-    const r = data as unknown as Row | null
-    if (!r || !String(r.g_name ?? '').trim() || !String(r.g_contact ?? '').trim()) return null
-    return { name: String(r.g_name).trim(), contact: String(r.g_contact).trim(), relationship: r.g_rel ?? null, namedAt: r.g_created ?? null }
-  }
+  // Xpert records (hetzner) ---------------------------------------------------------
+  listXperts(f: ListFilter) { return this.records.list(f) }
+  getXpert(id: string) { return this.records.get(id) }
+  xpertsByIds(ids: string[]) { return this.records.byIds(ids) }
+  xpertsByStatus(status: XpertStatus, limit: number) { return this.records.byStatus(status, limit) }
+  legacyGuarantor(xpertId: string) { return this.records.legacyGuarantor(xpertId) }
 
   // Status ----------------------------------------------------------------------
   async applyTransition(t: ApplyTransition) {
-    const { error } = await this.db.rpc('xpert_apply_transition', {
-      p_xpert_id: t.xpertId,
-      p_expected_from: t.expectedFrom,
-      p_to: t.to,
-      p_trigger: t.trigger,
-      p_reason: t.reason,
-      p_actor: t.actorId,
-      p_automatic: t.automatic,
-      p_set_active: t.setActive,
-      p_verification_src: t.verificationSource ?? null,
-    })
-    if (!error) return
-    if (error.code === '40001') throw new StoreError('conflict', error.message)
-    if (error.code === 'P0002') throw new StoreError('not_found', 'Xpert not found')
-    fail('Could not change the status', error)
+    const historyId = await this.records.applyTransition(t)
+    // The status and its history are already safe in hetzner. Copy the audit row into the console's
+    // own log. If this fails, the hourly sweep copies it later (the unique key stops a duplicate).
+    try {
+      await this.mirrorAudit([{
+        externalRef: `xpert_status:${historyId}`,
+        at: new Date().toISOString(),
+        actorId: t.actorId,
+        xpertId: t.xpertId,
+        before: { xpert_status: t.expectedFrom },
+        after: { xpert_status: t.to, account_active: t.setActive, trigger: t.trigger },
+        reason: t.reason,
+      }])
+    } catch {
+      /* repaired by the sweep */
+    }
   }
+
+  /** Writes status change audit rows into the console's audit log. Safe to repeat. Returns how many were new. */
+  async mirrorAudit(rows: StatusAuditRow[]): Promise<number> {
+    let added = 0
+    for (const r of rows) {
+      const { data: existing, error: readError } = await this.db.from('audit_log').select('id').eq('metadata->>external_ref', r.externalRef).limit(1)
+      if (readError) fail('Could not read the audit log', readError)
+      if ((existing ?? []).length > 0) continue
+      const { error } = await this.db.from('audit_log').insert({
+        occurred_at: r.at,
+        actor_id: r.actorId,
+        action: 'xpert.status_change',
+        entity_type: 'xpert',
+        entity_id: r.xpertId,
+        before: r.before,
+        after: r.after,
+        reason: r.reason,
+        metadata: { external_ref: r.externalRef, source: 'hetzner' },
+      })
+      // A concurrent copy hit the unique index. That is the intended guard.
+      if (error && error.code !== '23505') fail('Could not write the audit log', error)
+      if (!error) added++
+    }
+    return added
+  }
+
+  /** Copies any status change audit rows the console missed. Safe to repeat. */
+  async repairAuditMirror(since: Date) { return this.mirrorAudit(await this.records.recentStatusAudit(since)) }
+  async existingXpertIds(ids: string[]) { return this.records.existingIds(ids) }
 
   async history(xpertId: string): Promise<StatusHistoryRow[]> {
-    const { data, error } = await this.db.from('status_history').select('*').eq('xpert_id', xpertId).order('id', { ascending: false })
-    if (error) fail('Could not read the status history', error)
-    const rows = (data ?? []) as Row[]
-    const names = await this.staffNames(rows.map((r) => r.changed_by))
-    return rows.map((r) => ({
-      id: r.id,
-      oldStatus: r.old_status,
-      newStatus: r.new_status,
-      changedBy: r.changed_by,
-      changedByName: r.changed_by ? (names.get(r.changed_by) ?? null) : null,
-      automatic: r.automatic,
-      trigger: r.trigger,
-      reason: r.reason,
-      changedAt: r.changed_at,
-    }))
+    const rows = await this.records.history(xpertId)
+    const names = await this.staffNames(rows.map((r) => r.changedBy))
+    return rows.map((r) => ({ ...r, changedByName: r.changedBy ? (names.get(r.changedBy) ?? null) : null }))
   }
 
-  async lastEntered(xpertIds: string[], status: XpertStatus) {
-    const out = new Map<string, string>()
-    if (xpertIds.length === 0) return out
-    const { data, error } = await this.db
-      .from('status_history')
-      .select('xpert_id,changed_at')
-      .eq('new_status', status)
-      .in('xpert_id', xpertIds)
-      .order('id', { ascending: true })
-    if (error) fail('Could not read the status history', error)
-    for (const r of (data ?? []) as Row[]) out.set(r.xpert_id, r.changed_at) // later rows overwrite earlier ones
-    return out
-  }
+  lastEntered(xpertIds: string[], status: XpertStatus) { return this.records.lastEntered(xpertIds, status) }
 
   // Guarantors ------------------------------------------------------------------
   private async toGuarantors(rows: Row[]): Promise<GuarantorRecord[]> {
@@ -434,14 +386,13 @@ export class SupabaseXpertStore implements XpertStore {
 
   async counts() {
     const head = { count: 'exact' as const, head: true }
-    const [g, e, r, a] = await Promise.all([
-      this.db.from(this.env.XPERT_TABLE).select('xpert_status', head).eq('xpert_status', 'guarantor_pending'),
+    const [e, r] = await Promise.all([
       this.db.from('skill_evidence').select('id', head).eq('review_outcome', 'pending'),
       this.db.from('reference_check').select('id', head).eq('outcome', 'pending'),
-      this.db.from(this.env.XPERT_TABLE).select('xpert_status', head).eq('xpert_status', 'skill_verification'),
     ])
-    for (const x of [g, e, r, a]) if (x.error) fail('Could not count the queues', x.error)
-    return { guarantors: g.count ?? 0, evidence: e.count ?? 0, references: r.count ?? 0, approvals: a.count ?? 0 }
+    for (const x of [e, r]) if (x.error) fail('Could not count the queues', x.error)
+    const [guarantors, approvals] = await Promise.all([this.records.countByStatus('guarantor_pending'), this.records.countByStatus('skill_verification')])
+    return { guarantors, evidence: e.count ?? 0, references: r.count ?? 0, approvals }
   }
 
   async configRows() {

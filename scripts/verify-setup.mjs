@@ -4,19 +4,21 @@
 // Add API_URL=https://your-api.up.railway.app to also check the deployed API answers.
 // It only reads. It never writes, and it never prints a key.
 import { createClient } from '@supabase/supabase-js'
+import pg from 'pg'
 
 const env = process.env
 const results = []
 const ok = (name, detail = '') => results.push({ pass: true, name, detail })
 const bad = (name, fix) => results.push({ pass: false, name, fix })
-const ident = /^[a-z_][a-z0-9_]*$/
+const postgresUrl = /^postgres(ql)?:\/\//
 
 // 1. Variables ---------------------------------------------------------------
-const required = ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'WEB_APP_URL', 'XPERT_TABLE']
+const required = ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'WEB_APP_URL', 'HETZNER_DATABASE_URL', 'HETZNER_WRITE_DATABASE_URL']
 const missing = required.filter((k) => !env[k])
 if (missing.length) bad('Variables are set', `Missing: ${missing.join(', ')}. See .env.example.`)
 else ok('Variables are set')
-if (env.XPERT_TABLE && !ident.test(env.XPERT_TABLE)) bad('XPERT_TABLE is a plain name', 'Use lowercase letters, digits and underscores only.')
+for (const k of ['HETZNER_DATABASE_URL', 'HETZNER_WRITE_DATABASE_URL']) if (env[k] && !postgresUrl.test(env[k])) bad(`${k} is a postgres connection string`, 'It should start with postgres:// or postgresql://')
+if (env.HETZNER_DATABASE_URL && env.HETZNER_DATABASE_URL === env.HETZNER_WRITE_DATABASE_URL) bad('The reader and the writer are different database users', 'Create two users (console_read and console_write roles) and give each its own connection string.')
 if (env.CORS_ORIGINS && env.WEB_APP_URL && !env.CORS_ORIGINS.split(',').map((s) => s.trim().replace(/\/$/, '')).includes(env.WEB_APP_URL.replace(/\/$/, ''))) {
   bad('CORS_ORIGINS includes the console address', 'Add the value of WEB_APP_URL to CORS_ORIGINS, or the browser will block every request.')
 }
@@ -24,8 +26,6 @@ if (env.CORS_ORIGINS && env.WEB_APP_URL && !env.CORS_ORIGINS.split(',').map((s) 
 if (missing.length) finish()
 
 const db = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false, autoRefreshToken: false } })
-const xpertTable = env.XPERT_TABLE
-const col = (name) => env[name] || null
 
 async function exists(table, select = '*') {
   const { error } = await db.from(table).select(select, { head: true, count: 'exact' }).limit(1)
@@ -56,22 +56,46 @@ for (const [file, tables] of [
   }
 }
 
-// 3. The Xpert table and the columns migration 0002b adds ---------------------------
-const xErr = await exists(xpertTable)
-if (xErr) bad(`Xpert table "${xpertTable}" exists`, 'XPERT_TABLE does not match a table. Check the schema export and fix the variable.')
+// 3. The hetzner database (Xpert records) ------------------------------------------------------
+const sslMode = env.HETZNER_SSL ?? 'require'
+const ssl = sslMode === 'disable' ? false : sslMode === 'no-verify' ? { rejectUnauthorized: false } : { rejectUnauthorized: true, ...(env.HETZNER_CA_CERT ? { ca: env.HETZNER_CA_CERT.replace(/\\n/g, '\n') } : {}) }
+if (sslMode === 'no-verify') bad('The database certificate is checked', 'HETZNER_SSL=no-verify skips checking the server certificate. Use require (and HETZNER_CA_CERT if needed), or disable only on a private network.')
+async function asUser(url, fn) {
+  const c = new pg.Client({ connectionString: url, ssl, connectionTimeoutMillis: 8000 })
+  try { await c.connect() } catch (e) { return { connectError: e.message } }
+  try { return { value: await fn(c) } } finally { await c.end() }
+}
+const denied = async (c, sql) => { try { await c.query(sql); return false } catch (e) { return e.code === '42501' } }
+
+const reader = await asUser(env.HETZNER_DATABASE_URL, async (c) => ({
+  tables: (await c.query("select table_name from information_schema.tables where table_schema = 'public'")).rows.map((r) => r.table_name),
+  categories: (await c.query('select count(*)::int n from service_category')).rows[0].n,
+  taskTypes: (await c.query('select count(*)::int n from task_type')).rows[0].n,
+  noSecrets: await denied(c, 'select pin_hash from xpert'),
+  noRestricted: await denied(c, 'select * from xpert_restricted'),
+  noWrites: await denied(c, "update xpert set full_name = full_name where false"),
+}))
+if (reader.connectError) bad('The reader connects to the hetzner database', `${reader.connectError}. Check HETZNER_DATABASE_URL, HETZNER_SSL and the network (private address inside one Railway project, otherwise the TCP proxy with SSL).`)
 else {
-  ok(`Xpert table "${xpertTable}" exists`)
-  const statusErr = await exists(xpertTable, 'xpert_status,account_active,activated_by,activated_at,verification_source')
-  statusErr ? bad('Xpert status columns exist', 'Generate and run 0002b (node scripts/generate-0002b.mjs scripts/xpert-schema.json).') : ok('Xpert status columns exist')
-  const mapped = [
-    col('XPERT_ID_COLUMN') ?? 'id',
-    ...(col('XPERT_NAME_COLUMNS') ?? 'full_name').split(','),
-    col('XPERT_PHONE_COLUMN') ?? 'phone',
-    col('XPERT_CREATED_COLUMN') ?? 'created_at',
-    ...['XPERT_AREA_COLUMN', 'XPERT_SKILLS_COLUMN', 'XPERT_GUARANTOR_NAME_COLUMN', 'XPERT_GUARANTOR_CONTACT_COLUMN', 'XPERT_GUARANTOR_RELATIONSHIP_COLUMN'].map(col).filter(Boolean),
-  ]
-  const colErr = await exists(xpertTable, mapped.join(','))
-  colErr ? bad('Xpert column names match', `A mapped column does not exist (${colErr.message}). Fix the XPERT_* variables.`) : ok('Xpert column names match')
+  ok('The reader connects to the hetzner database')
+  const r = reader.value
+  for (const t of ['service_category', 'task_type', 'xpert', 'xpert_skill', 'xpert_status_history', 'employer', 'audit_log']) {
+    r.tables.includes(t) ? ok(`Table ${t} exists in hetzner`) : bad(`Table ${t} exists in hetzner`, 'Run the hetzner migrations in order (hetzner/migrations).')
+  }
+  r.categories === 10 && r.taskTypes === 40 ? ok('Catalogue is seeded (10 categories, 40 task types)') : bad('Catalogue is seeded (10 categories, 40 task types)', `Found ${r.categories} categories and ${r.taskTypes} task types. Run hetzner/migrations/0002_seed_catalog.sql.`)
+  r.noSecrets ? ok('The reader cannot read PIN hashes') : bad('The reader cannot read PIN hashes', 'The reader user has more access than it should. Use a login created in role console_read and nothing else.')
+  r.noRestricted ? ok('The reader cannot read the restricted table') : bad('The reader cannot read the restricted table', 'Revoke access to xpert_restricted from the reader.')
+  r.noWrites ? ok('The reader cannot change data') : bad('The reader cannot change data', 'The reader user can write. Use a login created in role console_read and nothing else.')
+}
+const writer = await asUser(env.HETZNER_WRITE_DATABASE_URL, async (c) => ({
+  canRun: (await c.query("select has_function_privilege(current_user, 'xpert_apply_transition(uuid,text,text,text,text,text,boolean,boolean,text)', 'execute') as ok")).rows[0].ok,
+  noRead: await denied(c, 'select id from xpert'),
+}))
+if (writer.connectError) bad('The writer connects to the hetzner database', `${writer.connectError}. Check HETZNER_WRITE_DATABASE_URL.`)
+else {
+  ok('The writer connects to the hetzner database')
+  writer.value.canRun ? ok('The writer can run the status transition function') : bad('The writer can run the status transition function', 'Run hetzner/migrations/0003_xpert_status.sql and create the login in role console_write.')
+  writer.value.noRead ? ok('The writer can do nothing else') : bad('The writer can do nothing else', 'The writer user can read tables directly. Use a login created in role console_write and nothing else.')
 }
 
 // 4. Staff, grants and storage ----------------------------------------------------------

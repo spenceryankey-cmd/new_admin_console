@@ -14,7 +14,10 @@ import { ConfigService } from './xperts/config.service'
 import { ConfigController, EvidenceController, GuarantorsController, QueuesController, ReferencesController, SweepsController, XpertsController } from './xperts/xperts.controller'
 import { ScreeningService } from './xperts/screening.service'
 import { SweepsService } from './xperts/sweeps.service'
-import { SupabaseXpertStore, XPERT_STORE } from './xperts/xpert.store'
+import { ConsoleXpertStore, XPERT_RECORDS, XPERT_STORE } from './xperts/xpert.store'
+import { IntegrityService } from './xperts/integrity.service'
+import { HetznerService } from './hetzner/hetzner.service'
+import { PostgresXpertRecords } from './hetzner/postgres.xpert.records'
 import { XpertsService } from './xperts/xperts.service'
 import { PricingController, RequestsController } from './requests/requests.controller'
 import { REQUEST_STORE, SupabaseRequestStore } from './requests/request.store'
@@ -39,7 +42,10 @@ import { SupabaseModule } from './supabase/supabase.module'
     AuditService,
     StaffService,
     RolesService,
-    { provide: XPERT_STORE, useClass: SupabaseXpertStore },
+    HetznerService,
+    IntegrityService,
+    { provide: XPERT_RECORDS, useClass: PostgresXpertRecords },
+    { provide: XPERT_STORE, useClass: ConsoleXpertStore },
     { provide: REQUEST_STORE, useClass: SupabaseRequestStore },
     RequestsService,
     { provide: JOB_STORE, useClass: SupabaseJobStore },

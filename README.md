@@ -13,7 +13,9 @@ packages/shared     Roles, permissions, input schemas and shared types. Imported
 supabase/migrations Additive SQL only, numbered. Nothing runs automatically.
 supabase/seed       One off scripts, for example the first super admin.
 docs                Plans, hand off notes, schema export queries.
-scripts             Repo checks (copy rules), verify-setup, the 0002b generator, database test helpers (scripts/db).
+hetzner             Migrations and tests for the hetzner Postgres database, which holds the Xpert records (hetzner/migrations).
+catalog             The service categories and task types, exactly as the live site lists them (catalog/categories.json).
+scripts             Repo checks (copy rules), verify-setup, the catalogue seed generator, the one off import from the previous backend, database test helpers (scripts/db).
 ```
 
 ## Run it locally
@@ -27,10 +29,10 @@ npm run dev:web          # http://localhost:5173
 
 Checks: `npm run typecheck`, `npm test`, `npm run lint:copy`, `npm run build`.
 Try the screens without Supabase: `npm run dev:mock -w @beyondx/api` runs the real API code against sample data (development only).
-Test migrations on a local Postgres: `scripts/db/test-migrations.sh`.
+Test migrations on a local Postgres: `scripts/db/test-migrations.sh` (Supabase side) and `scripts/db/test-hetzner.sh hetzner/tests/test_hetzner.sql` (hetzner side). `scripts/db/test-hetzner-store.sh` runs the API's Postgres store against the hetzner schema, and `scripts/db/test-import.sh` tests the import.
 Check a live setup: `node --env-file=.env scripts/verify-setup.mjs`.
 
-API variables: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `WEB_APP_URL`, `CORS_ORIGINS`, `PORT`, `XPERT_TABLE` and the other `XPERT_*` names (see `.env.example`). The API refuses to start if a required one is missing.
+API variables: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `WEB_APP_URL`, `CORS_ORIGINS`, `PORT`, `HETZNER_DATABASE_URL`, `HETZNER_WRITE_DATABASE_URL` and `HETZNER_SSL` (see `.env.example`). The Xpert records are in the hetzner database, not in Supabase. The API refuses to start if a required one is missing.
 Web variables: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_API_URL`. The service role key never goes in the web app.
 
 ## How access works
@@ -39,7 +41,7 @@ Web variables: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_API_URL`. Th
 2. The API verifies the token, then requires an active row in `staff_profile`. Employers and Xperts who have a Supabase account on the main site get nothing.
 3. Every route must declare who may call it (`@Public`, `@AnyStaff` or `@RequirePermissions`). A route with no declaration is refused.
 4. Row level security repeats the check in the database, so a leaked browser session still cannot read or write beyond its role.
-5. `super_admin` can edit what each role may do on the Roles screen. `quotes.compose` is held by no role until they decide who prepares and sends quotes.
+5. `super_admin` can edit what each role may do on the Roles screen. `quotes.compose` (preparing and sending quotes) is held by every role that can see the dashboard, including finance. There is no finance sign off step for quotes above a price band; that was removed on purpose.
 
 ## Rules every new table follows
 

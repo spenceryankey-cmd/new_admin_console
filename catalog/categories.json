@@ -1,0 +1,15 @@
+{
+  "note": "The live site's service categories and task types, read from the main site code (src/data.ts). Field work only. Remote categories are not offered. Never add, rename or remove an entry here without the owner's approval. Codes are lowercase words joined by underscores, with ampersands dropped.",
+  "categories": [
+    { "label": "Facility & Cleaning", "tasks": ["Office cleaning", "School compound sweeping", "Hospital ward cleaning", "Gutter & drain clearing"] },
+    { "label": "Logistics & Delivery", "tasks": ["Warehouse stock sorting", "Goods offloading — Tema Port", "Supermarket shelf stocking", "Market porter"] },
+    { "label": "General Site Labour", "tasks": ["Carrying materials", "Digging & mixing", "Site cleanup", "Assisting tradespeople"] },
+    { "label": "Skilled Trades", "tasks": ["Plumbing installation & repair", "Electrical wiring & fittings", "Carpentry & joinery", "Trade-specific fault finding"] },
+    { "label": "Painting & Finishing", "tasks": ["Interior & exterior painting", "Tiling", "Plastering", "Wall & surface finishing"] },
+    { "label": "Repairs & Maintenance", "tasks": ["Appliance repair", "Small plumbing fixes", "Small electrical fixes", "General handyman work"] },
+    { "label": "Event & Hospitality", "tasks": ["Chair & table setup", "Catering assistant", "Food serving at events", "Venue decoration setup"] },
+    { "label": "Agriculture & Environment", "tasks": ["Farm weeding & harvesting", "Grass cutting & landscaping", "Tree planting", "Community garden maintenance"] },
+    { "label": "Retail & Trade Support", "tasks": ["Shop attendant", "Packing and bagging", "Loading & offloading trucks", "Cold store assistant"] },
+    { "label": "Community Services", "tasks": ["Neighbourhood waste collection", "School painting", "Street drain maintenance", "Public park upkeep"] }
+  ]
+}

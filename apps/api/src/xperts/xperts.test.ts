@@ -36,7 +36,7 @@ beforeEach(() => {
   const config = new ConfigService(store)
   xperts = new XpertsService(store, config)
   screening = new ScreeningService(store, xperts, config)
-  sweeps = new SweepsService(store, xperts, { SWEEPS_ENABLED: 'false' } as any, new RequestsService(new FakeRequestStore(), store, config), new JobsService(new FakeJobStore(new FakeRequestStore()), store, config))
+  sweeps = new SweepsService(store, xperts, { SWEEPS_ENABLED: 'false' } as any, new RequestsService(new FakeRequestStore(), store, config), new JobsService(new FakeJobStore(new FakeRequestStore()), store, config), { check: async () => ({ checked: 3, orphans: [{ table: 'job', xpertId: 'gone' }] }) } as any)
 })
 
 const passTicks = { shows_task: true, shows_xpert: true, recent: true, quality: true }

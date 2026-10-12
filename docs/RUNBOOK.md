@@ -46,3 +46,15 @@ These are built as settings or working values, marked Pending in Settings, so th
 - Notifying the employer when a quote is ready and the Xpert when dispatched. This needs the `notifications.recipient_id` column agreed with the backend owner.
 - The list of job categories, so benchmark rates and price bands line up with what Xperts list as skills.
 - How many hours before a job is flagged as not started or waiting on a confirmation (working values 24 and 48).
+
+## The hetzner database (Phase 7A)
+
+The Xpert records, their status history and the service catalogue are in the hetzner Postgres database. The console reaches it with two users, so a problem is usually one of these.
+
+- **Every Xpert screen fails with a database error.** Run `node --env-file=.env scripts/verify-setup.mjs`. It tells you whether the reader connects, whether the tables exist and whether `HETZNER_SSL` matches where the database runs. On Railway's private network use `disable`. Anywhere public use `require`.
+- **A status change fails with "The status changed".** Someone else moved that Xpert first. Reload and try again. Nothing was changed.
+- **A status change fails with a permission error.** The writer user must be created in the `console_write` role and nothing else. Re-run Part 1b of `docs/SETUP.md`.
+- **The hourly sweep result shows `orphanedReferences` above 0.** Some console record points at an Xpert id that does not exist in hetzner (a typo, or an Xpert row that was removed). The log lists the table and id. Nothing is deleted automatically. Fix the id by hand or tell the console team.
+- **The sweep result shows `auditCopied` above 0.** The console copied a status change into its audit log that it had missed. That is the repair working. A number that is above 0 every hour means the copy is failing: check the API logs.
+- **A new Xpert registered but cannot sign in to work.** That is correct until they are approved in the console. The database starts every new Xpert as Applied with the account off.
+- **Never** edit `xpert_status` or `account_active` directly in the database. A trigger refuses it. Use the console, which records who changed it and why.

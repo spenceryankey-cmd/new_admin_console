@@ -1,47 +1,26 @@
 # What James needs to do
 
-This is the list for whoever owns the BeyondX Supabase project, the Railway backend and the main site (jamesjnr1). It is ordered by when each item is needed. Items 1 to 5 unblock Phase 1 going live. Items 6 to 9 are needed before Phase 2 can be released.
+This is the list for whoever owns the BeyondX Supabase project, the Railway backend and the main site (jamesjnr1). Read `docs/PHASE7.md` first: the Xpert records now live in a Postgres database called hetzner, not in Supabase.
 
 Never paste keys into chat, GitHub or email. Set them directly in Railway and Vercel.
 
-## Needed now (Phase 1)
+## Needed now
 
-1. **Tell us which database is shared.** Confirm whether the Railway backend uses the same Supabase Postgres project as the Vercel `/api` functions on the main site, and which project is production. The console reads and writes the same schema, so this decides everything after Phase 1.
+1. **Create the hetzner database and its three users.** Run `hetzner/migrations` in order as the owner, then create `console_reader`, `console_writer` and `backend_user` (the exact commands are in `docs/SETUP.md`, Part 1b). Tell the console team where it runs: in the same Railway project and environment as the console API (then use the private address and `HETZNER_SSL=disable`), or somewhere else (then the public address, SSL, and an allow list).
 
-2. **Export the schema.** Run the queries in `docs/schema-export.sql` in the Supabase SQL editor of the production project and send the results. They read table, column, key, policy and trigger definitions only, no row data. Phase 2 is built, and this export is what lets the last migration (0002b) be generated with the right names.
+2. **Point the main backend at hetzner as `backend_user`,** and make the small changes in `docs/BACKEND_CHANGES.md`: registration stops setting any status, every Xpert route refuses an Xpert whose `account_active` is false, and the employer facing list shows only active Xperts. The console cannot do this part. Without it, the Approve button records the decision but does not stop anyone.
 
-3. **Configure Supabase Auth for staff.**
-   - Authentication, URL Configuration: add the admin console address as a redirect URL, for example `https://admin.beyondxco.com/set-password`.
-   - Authentication, SMTP: set up custom SMTP (Resend works, the main site already uses it). The built in Supabase mailer is rate limited and unreliable for invitations.
-   - Do not turn off email sign ups or email OTP. The main site uses `signInWithOtp` for employer email verification, and the console shares the same Auth user pool. The console is protected by the `staff_profile` table, not by closing sign ups, so employers cannot get in.
-   - Optional but recommended: enable TOTP multi factor authentication.
+3. **Do not run `prisma migrate` or `prisma db push` against hetzner.** The console owns those migrations. Use `prisma db pull` and map the models with `@@map`.
 
-4. **Review and run migrations 0001 and 0002a.** File: `supabase/migrations/0001_staff_roles_audit.sql`. It creates three new tables (`staff_profile`, `role_permission`, `audit_log`) and helper functions. It does not touch any existing table. It was tested on a local Postgres 16, including audit entries, blocked deletes and row level security. Run it once in the SQL editor after you have read it. Then run `supabase/migrations/0002a_xpert_screening.sql` (new tables only). Then invite the first super admin in Authentication and run `supabase/seed/bootstrap_super_admin.sql` (edit the name and email first) to create the first super admin. Use an email address that no employer on the main site uses.
+4. **Copy the existing Xperts and employers.** Run `scripts/import-from-legacy.mjs` as a dry run first, read its report, then apply it. It keeps ids and skips coordinators, and it lists every skill that does not match the catalogue exactly so you can fix them by hand. Decide, before applying, whether existing active Xperts become provisionally or fully active.
 
-5. **Deploy the console.**
-   - Railway: new service from the new repo. The root `railway.json` holds the build and start commands. Variables: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `WEB_APP_URL`, `CORS_ORIGINS`, `PORT` (see `.env.example`).
-   - Vercel: new project from the new repo with the repo root as the root directory. The root `vercel.json` holds the build settings. Variables: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_API_URL`.
-   - DNS: point an admin subdomain (for example `admin.beyondxco.com`) at the Vercel project.
-   - GitHub: add jamesjnr1 as a collaborator on the new repository.
+5. **Never hard delete an Xpert row.** The console's records point at Xpert ids with no foreign key across the two databases, so a deleted row would leave orphans. The database blocks hard deletes on its own tables. Soft delete with `deleted_at`.
 
-## The admin side
+6. **Sensitive fields.** `prisonFacility`, `offenseLevel`, `offenseNotes`, `releaseDate` and the Ghana Card number are no longer on the Xpert record. They move to a restricted table that the console cannot read, and the card number is stored only as its last four characters plus a keyed hash. The backend must never return them to a browser (the masked last four only).
 
-The Supabase, Railway and Vercel steps are written out in `docs/SETUP.md`, and `node --env-file=.env scripts/verify-setup.mjs` checks them. Items 1 to 5 below are covered there. The part that only the backend owner can do is item 6, with the code pattern in `docs/BACKEND_CHANGES.md`.
+7. **Skills and categories.** The registration screens must offer only the codes in `service_category` and `task_type` (10 categories, 40 task types, field work only). Remote categories are gone. The catalogue is read only for everyone.
 
-## Needed before Phase 2 can be released
-
-6. **Make the Railway backend respect Xpert approval.** Today an Xpert gets a token and a dashboard the moment they register. The new model needs the backend to check the Xpert's approval before doing anything useful for them. Phase 2 adds `xpert_status`, `account_active`, `activated_by`, `activated_at` and `verification_source` to the Xpert record. The backend must then:
-   - set `account_active` to false and `xpert_status` to `applied` when a new Xpert registers;
-   - refuse jobs, offers, push notifications and the dashboard unless `account_active` is true, and show a holding page such as "Your application is being reviewed";
-   - leave Xperts out of `GET /api/workers`, the list employers can see, unless `account_active` is true.
-
-   The console cannot do this part. Without it, the Approve button records the decision but does not stop anyone.
-
-7. **Give the console team read access to the backend repo,** or at least the Xpert, task and employer models and the Xpert registration code. We inferred those fields from the main site and the old admin screens and need to confirm them.
-
-8. **Existing Xperts.** Agree a cutover date. We will prepare a backfill that sets `full_active` for Xperts with a completed job and clean feedback and `provisional_active` for the rest, and move their guarantor details into the new guarantor table. You will be shown the list before it runs.
-
-9. **Allow one extra column on `notifications`.** Phase 3 adds a nullable `recipient_id` so the existing bell can reach one employer or one Xpert. The main site's reads keep working because the column is nullable.
+8. **Allow one extra column on `notifications`.** Phase 3 adds a nullable `recipient_id` so the existing bell can reach one employer or one Xpert. The main site's reads keep working because the column is nullable.
 
 ## Needed before the old admin is retired (Phase 6)
 
