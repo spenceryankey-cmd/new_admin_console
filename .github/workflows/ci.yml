@@ -35,5 +35,17 @@ jobs:
           --health-retries 10
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
       - run: sudo apt-get update && sudo apt-get install -y postgresql-client
-      - run: CI_PG=1 bash scripts/db/test-migrations.sh scripts/db/test_0002a.sql scripts/db/test_0003.sql scripts/db/test_0004.sql scripts/db/test_0005.sql scripts/db/test_hardening.sql
+      - name: Console migrations (Supabase project)
+        run: CI_PG=1 bash scripts/db/test-migrations.sh scripts/db/test_0002a.sql scripts/db/test_0003.sql scripts/db/test_0004.sql scripts/db/test_0005.sql scripts/db/test_hardening.sql scripts/db/test_0006_0007.sql
+      - name: Hetzner migrations (Xpert database)
+        run: CI_PG=1 bash scripts/db/test-hetzner.sh hetzner/tests/test_hetzner.sql
+      - name: Postgres Xpert store against the hetzner schema
+        run: CI_PG=1 bash scripts/db/test-hetzner-store.sh
+      - name: Import from the previous backend
+        run: CI_PG=1 bash scripts/db/test-import.sh
