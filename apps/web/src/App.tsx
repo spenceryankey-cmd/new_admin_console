@@ -21,6 +21,8 @@ import { ChangeOrders } from './pages/ChangeOrders'
 import { Flags } from './pages/Flags'
 import { FlagDetailPage } from './pages/FlagDetail'
 import { Feedback } from './pages/Feedback'
+import { Inbox } from './pages/Inbox'
+import { SendNotification } from './pages/SendNotification'
 import { CoordinatorDetailPage, Coordinators } from './pages/Coordinators'
 import { Settings } from './pages/Settings'
 import { XpertDetailPage } from './pages/XpertDetail'
@@ -80,6 +82,8 @@ const BUILT: Record<string, React.ReactNode> = {
   '/flags': <Flags />,
   '/feedback': <Feedback />,
   '/coordinators': <Coordinators />,
+  '/inbox': <Inbox />,
+  '/notifications': <SendNotification />,
 }
 
 export default function App() {
