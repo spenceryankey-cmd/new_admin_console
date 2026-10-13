@@ -161,6 +161,12 @@ try {
   }
 }
 
+// 5c. Support inbox and notifications (0012) --------------------------------------------------
+for (const t of ['inbox_state', 'notification_send']) {
+  const r = await db.from(t).select('*', { head: true, count: 'exact' })
+  r.error ? bad(`Table ${t} exists`, 'Run supabase/migrations/0012_inbox_notifications.sql.') : ok(`Table ${t} exists`)
+}
+
 // 6. Deployed API ----------------------------------------------------------------------------
 if (env.API_URL) {
   try {

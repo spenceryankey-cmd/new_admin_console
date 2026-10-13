@@ -30,6 +30,8 @@ Never paste keys into chat, GitHub or email. Set them directly in Railway and Ve
 11. Re-enable phone verification at Xpert signup once Arkesel delivery works. It is switched off in the signup form today.
 12. Stop emailing employer Ghana Card numbers in plain text and storing them in `support_messages`. Move them to a dedicated column that only named roles can read.
 
+13. **Main site link for the Support inbox and notifications (Phase 8).** (a) A read only database user for the `support_messages` table, plus its column names. (b) How the bell notifications are stored and a safe way for the console to add one (a function or endpoint is better than direct table access). Details in `docs/PHASE8.md`. Until this is done, the two console pages say "not connected".
+
 ## Main site changes that come with later phases
 
 These are for planning, not for now.

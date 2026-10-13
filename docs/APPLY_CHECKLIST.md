@@ -1,6 +1,6 @@
-# Apply checklist: Phases 7A to 7D
+# Apply checklist: Phases 7A to 8
 
-Nothing from 7A to 7D has been run on a real database yet. This is the order to do it in. Tick each box as you go. Credentials go only into Railway and Supabase, never into chat, GitHub or email.
+Nothing from 7A to 8 has been run on a real database yet. This is the order to do it in. Tick each box as you go. Credentials go only into Railway and Supabase, never into chat, GitHub or email.
 
 Migrations 0001 to 0007 of the console are assumed to be applied already. Check first (step 2.1).
 
@@ -51,6 +51,7 @@ Then the migrations, in order. Read each file before running it. Each one is wra
 - [ ] 3.4 Do the same for every other super admin and decision maker. Keep at least two super admins.
 - [ ] 3.5 Now run `supabase/migrations/0011_mfa.sql`.
 - [ ] 3.6 Sign out and in again, with the code. The console must still work. If it does not, tell me the exact message before doing anything else.
+- [ ] 3.7 Now run `supabase/migrations/0012_inbox_notifications.sql` (the Support inbox and Send a notification tables). The two pages will say "not connected" until the main site link is made (see `docs/PHASE8.md`). Nothing else depends on it.
 
 ## 4. Import the existing Xperts and employers
 
