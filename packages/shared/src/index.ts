@@ -1,4 +1,6 @@
 export * from './access'
+export * from './mfa'
+export * from './sensitive'
 export * from './schemas'
 export * from './xpertStatus'
 export * from './screening'

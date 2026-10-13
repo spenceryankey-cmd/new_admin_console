@@ -5,11 +5,27 @@ import type { StaffContext } from './staff-context'
 
 export interface StaffLoader {
   loadStaff(userId: string): Promise<StaffContext | null>
+  /** Optional: remember that this person has used a second factor. */
+  noteMfa?(userId: string): Promise<void>
 }
 
 @Injectable()
 export class AccessService implements StaffLoader {
+  private readonly mfaNoted = new Set<string>()
+
   constructor(private readonly supabase: SupabaseService) {}
+
+  /** Stamps staff_profile.mfa_enrolled_at the first time a second factor session is seen. Best effort. */
+  async noteMfa(userId: string): Promise<void> {
+    if (this.mfaNoted.has(userId)) return
+    this.mfaNoted.add(userId)
+    const { error } = await this.supabase.admin
+      .from('staff_profile')
+      .update({ mfa_enrolled_at: new Date().toISOString(), change_reason: 'First sign in with an authenticator code' })
+      .eq('user_id', userId)
+      .is('mfa_enrolled_at', null)
+    if (error) this.mfaNoted.delete(userId)
+  }
 
   async loadStaff(userId: string): Promise<StaffContext | null> {
     const { data: row, error } = await this.supabase.admin

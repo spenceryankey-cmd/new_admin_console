@@ -1,30 +1,18 @@
 import { CanActivate, ExecutionContext, ForbiddenException, Inject, Injectable, UnauthorizedException } from '@nestjs/common'
 import { Reflector } from '@nestjs/core'
-import { IS_PUBLIC } from './decorators'
+import { MFA_REQUIRED_CODE, MFA_REQUIRED_MESSAGE, mfaSatisfied } from '@beyondx/shared'
+import { ALLOW_WITHOUT_MFA, IS_PUBLIC } from './decorators'
 import { AccessService, type StaffLoader } from './access.service'
 import type { RequestWithStaff } from './staff-context'
-import { SupabaseService } from '../supabase/supabase.service'
+import { TOKEN_VERIFIER, type TokenVerifier } from './token.verifier'
 
-export interface TokenVerifier {
-  verify(token: string): Promise<string | null>
-}
-
-@Injectable()
-export class SupabaseTokenVerifier implements TokenVerifier {
-  constructor(private readonly supabase: SupabaseService) {}
-
-  async verify(token: string): Promise<string | null> {
-    const { data, error } = await this.supabase.admin.auth.getUser(token)
-    return error || !data.user ? null : data.user.id
-  }
-}
-
-export const TOKEN_VERIFIER = Symbol('TOKEN_VERIFIER')
+export { TOKEN_VERIFIER, type TokenVerifier } from './token.verifier'
 
 /**
- * Runs on every route. Verifies the Supabase access token, then requires an
- * active staff_profile. An employer or Xpert who has a Supabase account on the
- * main site can sign in to Supabase but gets nothing here.
+ * Runs on every route. Verifies the Supabase access token on this server, then requires an
+ * active staff_profile. An employer or Xpert who has a Supabase account on the main site can sign in
+ * to Supabase but gets nothing here. Roles that must use a second factor are refused everywhere except
+ * the routes marked AllowWithoutMfa until their session has passed the authenticator code.
  */
 @Injectable()
 export class AuthGuard implements CanActivate {
@@ -43,14 +31,21 @@ export class AuthGuard implements CanActivate {
     const token = value?.startsWith('Bearer ') ? value.slice(7).trim() : ''
     if (!token) throw new UnauthorizedException('Sign in to continue')
 
-    const userId = await this.tokens.verify(token)
-    if (!userId) throw new UnauthorizedException('Your session has expired. Sign in again.')
+    const verified = await this.tokens.verify(token)
+    if (!verified) throw new UnauthorizedException('Your session has expired. Sign in again.')
 
-    const staff = await this.access.loadStaff(userId)
+    const staff = await this.access.loadStaff(verified.userId)
     if (!staff) throw new ForbiddenException('This account is not set up for the admin console')
     if (!staff.isActive) throw new ForbiddenException('This account has been deactivated')
 
-    req.staff = staff
+    const satisfied = mfaSatisfied(staff.role, verified.aal)
+    const exempt = this.reflector.getAllAndOverride<boolean>(ALLOW_WITHOUT_MFA, [ctx.getHandler(), ctx.getClass()])
+    if (!satisfied && !exempt) {
+      throw new ForbiddenException({ statusCode: 403, error: 'Forbidden', message: MFA_REQUIRED_MESSAGE, code: MFA_REQUIRED_CODE })
+    }
+    if (satisfied && verified.aal === 'aal2') void this.access.noteMfa?.(verified.userId)
+
+    req.staff = { ...staff, aal: verified.aal }
     return true
   }
 }

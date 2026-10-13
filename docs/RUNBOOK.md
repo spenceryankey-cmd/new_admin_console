@@ -25,6 +25,8 @@ Ops reviewers do the first pass work on screening, quoting, dispatch and monitor
 - The `service_role` key lives only in Railway. If it is ever pasted anywhere else, rotate it in Supabase and update Railway at once.
 - When someone leaves, make them inactive on the Staff screen the same day. Inactive staff cannot use the console even though their sign in still works.
 - Keep at least two super admins so one person is never the only way in.
+- Super admins and decision makers sign in with a password and an authenticator app code. If one of them loses their phone, another super admin opens Supabase, Authentication, Users, finds them, and removes the authenticator factor. At their next sign in they are shown the set up screen again. If the only super admin is locked out, remove the factor in Supabase as the project owner. Removing a factor is recorded in Supabase's own logs, so say who did it and why in the team channel.
+- Ops reviewers and finance approvers are not asked for a code yet. To require it, add the role to `MFA_REQUIRED_ROLES` and `role_requires_mfa()` (new migration) together.
 
 ## Retiring the old admin
 In this order, once the new console has been used for a full week with no problems:

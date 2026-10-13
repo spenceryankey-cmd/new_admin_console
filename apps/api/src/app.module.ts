@@ -1,9 +1,11 @@
 import { Module } from '@nestjs/common'
 import { APP_GUARD } from '@nestjs/core'
+import { ENV, type Env } from './config/env'
 import { AuditController } from './audit/audit.controller'
 import { AuditService } from './audit/audit.service'
 import { AccessService } from './auth/access.service'
-import { AuthGuard, SupabaseTokenVerifier, TOKEN_VERIFIER } from './auth/auth.guard'
+import { AuthGuard } from './auth/auth.guard'
+import { JwtTokenVerifier, TOKEN_VERIFIER } from './auth/token.verifier'
 import { MeController } from './me.controller'
 import { PermissionsGuard } from './rbac/permissions.guard'
 import { RolesController } from './roles/roles.controller'
@@ -56,7 +58,7 @@ import { SupabaseModule } from './supabase/supabase.module'
     XpertsService,
     ScreeningService,
     SweepsService,
-    { provide: TOKEN_VERIFIER, useClass: SupabaseTokenVerifier },
+    { provide: TOKEN_VERIFIER, useFactory: (env: Env) => JwtTokenVerifier.fromUrl(env.SUPABASE_URL), inject: [ENV] },
     // Order matters: sign in first, then permissions.
     { provide: APP_GUARD, useClass: AuthGuard },
     { provide: APP_GUARD, useClass: PermissionsGuard },

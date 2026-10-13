@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { PERMISSIONS, ROLES } from './access'
+import type { MfaStatus } from './mfa'
 
 const reason = z.string().trim().min(3, 'Give a reason of at least 3 characters').max(500)
 
@@ -53,6 +54,8 @@ export type StaffMember = {
 export type MeResponse = {
   staff: Pick<StaffMember, 'userId' | 'email' | 'fullName' | 'role' | 'isActive'>
   permissions: (typeof PERMISSIONS)[number][]
+  /** Whether this role must use an authenticator code, and whether this session already has. */
+  mfa: MfaStatus
 }
 
 export type RolePermissionRow = {

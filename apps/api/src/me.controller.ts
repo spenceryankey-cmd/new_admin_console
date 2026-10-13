@@ -1,6 +1,6 @@
 import { Controller, Get, Headers, Post } from '@nestjs/common'
-import type { MeResponse } from '@beyondx/shared'
-import { AnyStaff, CurrentStaff, Public } from './auth/decorators'
+import { mfaSatisfied, roleRequiresMfa, type MeResponse } from '@beyondx/shared'
+import { AllowWithoutMfa, AnyStaff, CurrentStaff, Public } from './auth/decorators'
 import type { StaffContext } from './auth/staff-context'
 import { AuditService } from './audit/audit.service'
 
@@ -15,6 +15,7 @@ export class MeController {
   }
 
   @AnyStaff()
+  @AllowWithoutMfa()
   @Get('me')
   me(@CurrentStaff() s: StaffContext): MeResponse {
     return {
@@ -25,7 +26,9 @@ export class MeController {
         role: s.role,
         isActive: s.isActive,
       },
-      permissions: [...s.permissions],
+      // Nothing is granted until the second factor is done, so the list is empty until then.
+      permissions: mfaSatisfied(s.role, s.aal ?? 'aal1') ? [...s.permissions] : [],
+      mfa: { required: roleRequiresMfa(s.role), satisfied: mfaSatisfied(s.role, s.aal ?? 'aal1') },
     }
   }
 

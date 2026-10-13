@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import type { Permission } from '@beyondx/shared'
 import { useAuth } from './auth/AuthProvider'
+import { MfaGate } from './auth/MfaGate'
 import { Button, ErrorState, Spinner } from './components/ui'
 import { configError } from './lib/supabase'
 import { AppShell } from './layout/AppShell'
@@ -31,7 +32,7 @@ import { SetPassword } from './pages/SetPassword'
 import { Staff } from './pages/Staff'
 
 function Protected() {
-  const { loading, session, me, denied, meError, retryMe, signOut } = useAuth()
+  const { loading, session, me, denied, meError, retryMe, reloadMe, signOut } = useAuth()
   if (loading) return <Spinner label="Loading" />
   if (!session) return <Navigate to="/login" replace />
   if (denied) {
@@ -49,6 +50,9 @@ function Protected() {
         <Button variant="ghost" onClick={() => void signOut()}>Sign out</Button>
       </div>
     )
+  }
+  if (me.mfa.required && !me.mfa.satisfied) {
+    return <MfaGate email={me.staff.email} onDone={reloadMe} onSignOut={() => void signOut()} />
   }
   return <AppShell />
 }

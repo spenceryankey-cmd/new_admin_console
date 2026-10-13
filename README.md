@@ -38,10 +38,11 @@ Web variables: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_API_URL`. Th
 ## How access works
 
 1. Staff sign in with Supabase Auth (individual accounts, no shared password).
-2. The API verifies the token, then requires an active row in `staff_profile`. Employers and Xperts who have a Supabase account on the main site get nothing.
+2. The API verifies the token itself against Supabase's public signing keys (no call to Supabase per request), then requires an active row in `staff_profile`. Employers and Xperts who have a Supabase account on the main site get nothing.
 3. Every route must declare who may call it (`@Public`, `@AnyStaff` or `@RequirePermissions`). A route with no declaration is refused.
 4. Row level security repeats the check in the database, so a leaked browser session still cannot read or write beyond its role.
-5. `super_admin` can edit what each role may do on the Roles screen. `quotes.compose` (preparing and sending quotes) is held by every role that can see the dashboard, including finance. There is no finance sign off step for quotes above a price band; that was removed on purpose.
+5. Super admins and decision makers must also enter an authenticator app code. Until they do, the API and the database give them nothing, and sensitive fields (identity hashes, PIN hashes, tokens, keys) are never returned to the browser; a test checks every read route.
+6. `super_admin` can edit what each role may do on the Roles screen. `quotes.compose` (preparing and sending quotes) is held by every role that can see the dashboard, including finance. There is no finance sign off step for quotes above a price band; that was removed on purpose.
 
 ## Rules every new table follows
 

@@ -1,4 +1,4 @@
-import type { Permission, Role } from '@beyondx/shared'
+import type { AssuranceLevel, Permission, Role } from '@beyondx/shared'
 
 /** The signed in staff member, attached to the request by AuthGuard. */
 export type StaffContext = {
@@ -8,6 +8,8 @@ export type StaffContext = {
   role: Role
   isActive: boolean
   permissions: ReadonlySet<Permission>
+  /** How this session signed in. Set by AuthGuard. */
+  aal?: AssuranceLevel
 }
 
 export type RequestWithStaff = {

@@ -2,8 +2,9 @@ import 'reflect-metadata'
 import { ForbiddenException, UnauthorizedException, type ExecutionContext } from '@nestjs/common'
 import { Reflector } from '@nestjs/core'
 import { describe, expect, it } from 'vitest'
-import { AnyStaff, Public, RequirePermissions } from './auth/decorators'
+import { AllowWithoutMfa, AnyStaff, Public, RequirePermissions } from './auth/decorators'
 import { AuthGuard, type TokenVerifier } from './auth/auth.guard'
+import type { AssuranceLevel } from '@beyondx/shared'
 import type { StaffLoader } from './auth/access.service'
 import type { RequestWithStaff, StaffContext } from './auth/staff-context'
 import { loadEnv } from './config/env'
@@ -14,6 +15,7 @@ import { assertStaffChangeAllowed } from './staff/staff.rules'
 class Open {
   @Public() health() {}
   @AnyStaff() me() {}
+  @AnyStaff() @AllowWithoutMfa() whoAmI() {}
   @RequirePermissions('payments.record') recordPayment() {}
   @RequirePermissions('xperts.read', 'quotes.read') both() {}
   forgotten() {}
@@ -68,7 +70,7 @@ describe('PermissionsGuard', () => {
 })
 
 describe('AuthGuard', () => {
-  const verifier = (id: string | null): TokenVerifier => ({ verify: async () => id })
+  const verifier = (id: string | null, aal: AssuranceLevel = 'aal1'): TokenVerifier => ({ verify: async () => (id ? { userId: id, aal } : null) })
   const loader = (s: StaffContext | null): StaffLoader => ({ loadStaff: async () => s })
   const make = (id: string | null, s: StaffContext | null) => new AuthGuard(new Reflector(), verifier(id), loader(s))
 
@@ -100,6 +102,44 @@ describe('AuthGuard', () => {
     const req: RequestWithStaff = { headers: { authorization: 'Bearer ok' } }
     expect(await make('u1', staff('ops_reviewer')).canActivate(ctx('me', req))).toBe(true)
     expect(req.staff?.role).toBe('ops_reviewer')
+  })
+
+  describe('second factor', () => {
+    const req = (): RequestWithStaff => ({ headers: { authorization: 'Bearer ok' } })
+    const gate = (role: StaffContext['role'], aal: AssuranceLevel, noted: string[] = []) =>
+      new AuthGuard(new Reflector(), verifier('u1', aal), { loadStaff: async () => staff(role), noteMfa: async (id) => void noted.push(id) })
+
+    it('refuses a super admin who has only passed the password step, with a code the web app can read', async () => {
+      const e = await gate('super_admin', 'aal1').canActivate(ctx('me', req())).catch((x) => x)
+      expect(e).toBeInstanceOf(ForbiddenException)
+      expect(e.getResponse()).toMatchObject({ code: 'mfa_required' })
+    })
+
+    it('refuses a decision maker who has only passed the password step', async () => {
+      await expect(gate('decision_maker', 'aal1').canActivate(ctx('recordPayment', req()))).rejects.toThrow(ForbiddenException)
+    })
+
+    it('lets the sign in screen ask who it is before the code is entered, but does not attach any rights', async () => {
+      const r = req()
+      expect(await gate('super_admin', 'aal1').canActivate(ctx('whoAmI', r))).toBe(true)
+      expect(r.staff?.aal).toBe('aal1')
+    })
+
+    it('lets them in once the authenticator code has been entered, and notes it', async () => {
+      const noted: string[] = []
+      expect(await gate('super_admin', 'aal2', noted).canActivate(ctx('me', req()))).toBe(true)
+      expect(noted).toEqual(['u1'])
+    })
+
+    it('does not ask other roles for a code', async () => {
+      expect(await gate('ops_reviewer', 'aal1').canActivate(ctx('me', req()))).toBe(true)
+      expect(await gate('finance_approver', 'aal1').canActivate(ctx('me', req()))).toBe(true)
+    })
+
+    it('still refuses a missing, bad or non staff session before it looks at the second factor', async () => {
+      await expect(new AuthGuard(new Reflector(), verifier(null), loader(staff('super_admin'))).canActivate(ctx('whoAmI', req()))).rejects.toThrow(UnauthorizedException)
+      await expect(new AuthGuard(new Reflector(), verifier('u1', 'aal1'), loader(null)).canActivate(ctx('whoAmI', req()))).rejects.toThrow(ForbiddenException)
+    })
   })
 })
 

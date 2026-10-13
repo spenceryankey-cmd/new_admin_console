@@ -139,6 +139,28 @@ try {
   /* Not fatal: the settings endpoint is a convenience check. */
 }
 
+// 5b. Token checking and the second factor ---------------------------------------------------
+// The API checks tokens itself against the project's public signing keys, so those keys must exist.
+try {
+  const res = await fetch(`${env.SUPABASE_URL.replace(/\/$/, '')}/auth/v1/.well-known/jwks.json`)
+  const keys = res.ok ? ((await res.json()).keys ?? []) : []
+  keys.some((k) => ['ES256', 'RS256', 'EdDSA'].includes(k.alg) || k.kty === 'EC' || k.kty === 'RSA' || k.kty === 'OKP')
+    ? ok('Supabase publishes public signing keys (the API can check tokens itself)')
+    : bad('Supabase publishes public signing keys', 'Turn on JWT signing keys (asymmetric) for the project in Supabase, under Settings, JWT Keys. The API refuses every token until the keys exist.')
+} catch {
+  bad('Supabase publishes public signing keys', 'Could not reach the key address. Check SUPABASE_URL.')
+}
+{
+  const col = await db.from('staff_profile').select('mfa_enrolled_at').limit(1)
+  col.error ? bad('Second factor column exists', 'Run supabase/migrations/0011_mfa.sql.') : ok('Second factor column exists')
+  const missing = await db.from('staff_profile').select('email,role').in('role', ['super_admin', 'decision_maker']).eq('is_active', true).is('mfa_enrolled_at', null)
+  if (!col.error) {
+    missing.data?.length
+      ? ok('Super admins and decision makers who have not set up an authenticator app yet', `${missing.data.length}; they will be asked at their next sign in`)
+      : ok('Every active super admin and decision maker has signed in with an authenticator code')
+  }
+}
+
 // 6. Deployed API ----------------------------------------------------------------------------
 if (env.API_URL) {
   try {

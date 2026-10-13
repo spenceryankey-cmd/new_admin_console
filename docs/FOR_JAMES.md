@@ -22,6 +22,8 @@ Never paste keys into chat, GitHub or email. Set them directly in Railway and Ve
 
 8. **Allow one extra column on `notifications`.** Phase 3 adds a nullable `recipient_id` so the existing bell can reach one employer or one Xpert. The main site's reads keep working because the column is nullable.
 
+9. **Supabase settings for the console's sign in (Phase 7D).** Nothing on the main site changes. (a) In Supabase, Authentication, Sign In / Providers, make sure multi factor with an authenticator app (TOTP) is enabled. (b) In Settings, JWT Keys, switch the project to asymmetric signing keys. The console API checks tokens itself with the public keys and does not accept the old shared secret. Employers and Xperts signing in on the main site keep working, because their tokens are signed by the same project and the main site does not depend on which kind of key signs them. Check this with a test sign in on the main site after switching.
+
 ## Needed before the old admin is retired (Phase 6)
 
 10. Rotate `ADMIN_PASSWORD`, then switch off the old `/admin` page and the `/admin/clear-data` and `/admin/clear-employers` routes. They hard delete records.

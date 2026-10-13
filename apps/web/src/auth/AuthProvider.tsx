@@ -13,6 +13,8 @@ type AuthState = {
   denied: string | null
   meError: string | null
   retryMe: () => void
+  /** Reload who you are after the authenticator code was accepted. */
+  reloadMe: () => Promise<void>
   signOut: () => Promise<void>
   has: (needed: Permission | readonly Permission[]) => boolean
   hasAny: (needed: readonly Permission[]) => boolean
@@ -47,7 +49,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Record one sign in per browser session in the audit log.
   const userId = session?.user.id
-  const signedIn = !!meQuery.data
+  // A role that needs the authenticator code is not signed in until it has entered one.
+  const signedIn = !!meQuery.data && meQuery.data.mfa.satisfied
   useEffect(() => {
     if (!userId || !signedIn) return
     const key = `bx_signin_logged_${userId}`
@@ -78,6 +81,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       denied,
       meError: err && !denied ? err.message : null,
       retryMe: () => void meQuery.refetch(),
+      reloadMe: async () => {
+        await meQuery.refetch()
+      },
       signOut,
       has: (needed) => (subject ? can(subject, needed) : false),
       hasAny: (needed) => (subject ? needed.some((p) => can(subject, p)) : false),
