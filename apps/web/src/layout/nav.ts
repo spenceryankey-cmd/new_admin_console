@@ -9,9 +9,11 @@ import {
   Inbox,
   KeyRound,
   LayoutDashboard,
+  MailOpen,
   MessageSquareText,
   PhoneCall,
   ScrollText,
+  Send,
   Settings,
   ShieldCheck,
   Users,
@@ -65,6 +67,13 @@ export const NAV: NavGroup[] = [
       { to: '/change-orders', label: 'Change orders', icon: ClipboardCheck, anyOf: ['changeorders.manage'], phase: 1, summary: 'Log scope changes and the confirmations from both sides.' },
       { to: '/coordinators', label: 'Coordinators', icon: UsersRound, anyOf: ['coordinators.read'], phase: 1, summary: 'Team rosters and metrics computed from the records.' },
       { to: '/feedback', label: 'Feedback', icon: Gauge, anyOf: ['feedback.read'], phase: 1, summary: 'Structured feedback from employers and Xperts, per job.' },
+    ],
+  },
+  {
+    title: 'Messages',
+    items: [
+      { to: '/inbox', label: 'Support inbox', icon: MailOpen, anyOf: ['inbox.read'], phase: 1, summary: 'Messages and reports from Xperts and employers, to mark handled.' },
+      { to: '/notifications', label: 'Send a notification', icon: Send, anyOf: ['notifications.send'], phase: 1, summary: 'Send a bell notification to one person or a group, with a record of every send.' },
     ],
   },
   {
