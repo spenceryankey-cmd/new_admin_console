@@ -7,12 +7,13 @@ import { AuditController } from './audit/audit.controller'
 import { PricingController, RequestsController } from './requests/requests.controller'
 import { ChangeOrdersController, JobsController, RecurringController } from './jobs/jobs.controller'
 import { CoordinatorsController, FeedbackController, FlagsController, ReliabilityController } from './trust/trust.controller'
+import { InboxController, NotificationsController } from './inbox/inbox.controller'
 import { MeController } from './me.controller'
 import { RolesController } from './roles/roles.controller'
 import { StaffController } from './staff/staff.controller'
 import { ConfigController, EvidenceController, GuarantorsController, QueuesController, ReferencesController, SweepsController, XpertsController } from './xperts/xperts.controller'
 
-const controllers = [MeController, StaffController, RolesController, AuditController, XpertsController, QueuesController, GuarantorsController, EvidenceController, ReferencesController, ConfigController, SweepsController, RequestsController, PricingController, JobsController, ChangeOrdersController, RecurringController, FlagsController, FeedbackController, ReliabilityController, CoordinatorsController]
+const controllers = [MeController, StaffController, RolesController, AuditController, XpertsController, QueuesController, GuarantorsController, EvidenceController, ReferencesController, ConfigController, SweepsController, RequestsController, PricingController, JobsController, ChangeOrdersController, RecurringController, FlagsController, FeedbackController, ReliabilityController, CoordinatorsController, InboxController, NotificationsController]
 
 type Route = { name: string; path: string }
 const GET = 0
